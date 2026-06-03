@@ -12,4 +12,5 @@ idf_component_register(
         playlist
         memory_pool
         system_monitor
+        esp_timer
 )

@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
 #include <cstddef>
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_vendor.h"
 
@@ -52,4 +54,6 @@ private:
     uint8_t* flush_buf_ = nullptr;
     size_t framebuffer_bytes_ = 0;
     size_t flush_buf_bytes_ = 0;
+    SemaphoreHandle_t ui_mutex_ = nullptr;
+    bool animation_enabled_ = false;
 };

@@ -100,6 +100,7 @@ void store_rgb888(uint8_t* dst, uint32_t color)
 bool DisplayManager::init()
 {
     ESP_LOGI("LCD", "[INF] Init display pipeline");
+    ui_mutex_ = xSemaphoreCreateMutex();
 
     ESP_LOGI("LCD", "[INF] Init IO expander for LCD and touch reset");
     ESP_ERROR_CHECK(ioexp_write(kIoExpRegConfig, 0x78));
@@ -187,6 +188,10 @@ bool DisplayManager::init_framebuffers()
 
 void DisplayManager::deinit()
 {
+    if (ui_mutex_) {
+        vSemaphoreDelete(ui_mutex_);
+        ui_mutex_ = nullptr;
+    }
     if (framebuffer_) {
         heap_caps_free(framebuffer_);
         framebuffer_ = nullptr;
@@ -224,6 +229,9 @@ void DisplayManager::render_static_ui()
     if (!framebuffer_) {
         return;
     }
+    if (ui_mutex_ && xSemaphoreTake(ui_mutex_, pdMS_TO_TICKS(50)) != pdTRUE) {
+        return;
+    }
 
     ESP_LOGI("LCD", "[INF] Render static UI scaffold");
     clear_screen(kBgColor);
@@ -249,6 +257,9 @@ void DisplayManager::render_static_ui()
     draw_transport_buttons(false, UiControl::None);
 
     present_area(0, 0, BOARD_LCD_H_RES, BOARD_LCD_V_RES);
+    if (ui_mutex_) {
+        xSemaphoreGive(ui_mutex_);
+    }
 }
 
 void DisplayManager::update_status_bar(uint8_t battery_percent,
@@ -257,6 +268,9 @@ void DisplayManager::update_status_bar(uint8_t battery_percent,
                                        size_t psram_free_bytes,
                                        float pcm_water_level)
 {
+    if (ui_mutex_ && xSemaphoreTake(ui_mutex_, pdMS_TO_TICKS(20)) != pdTRUE) {
+        return;
+    }
     fill_rect_mem(0, kStatusBarY, BOARD_LCD_H_RES, kStatusBarH, kPanelColor);
 
     char left[32];
@@ -284,10 +298,16 @@ void DisplayManager::update_status_bar(uint8_t battery_percent,
     ESP_LOGI("LCD", "[INF] Status bar updated: battery=%u%% pcm=%d%%",
              static_cast<unsigned>(battery_percent),
              water_percent);
+    if (ui_mutex_) {
+        xSemaphoreGive(ui_mutex_);
+    }
 }
 
 void DisplayManager::update_now_playing(const char* title, size_t index, size_t total)
 {
+    if (ui_mutex_ && xSemaphoreTake(ui_mutex_, pdMS_TO_TICKS(20)) != pdTRUE) {
+        return;
+    }
     fill_rect_mem(kSongPanelX + 2, kSongPanelY + 2, kSongPanelW - 4, kSongPanelH - 4, kPanelColor);
 
     char header[32];
@@ -302,13 +322,19 @@ void DisplayManager::update_now_playing(const char* title, size_t index, size_t 
     draw_title_block(title ? title : "NO TRACK");
     present_area(kSongPanelX, kSongPanelY, kSongPanelW, kSongPanelH);
     ESP_LOGI("LCD", "[INF] Now playing updated: %s", title ? title : "NO TRACK");
+    if (ui_mutex_) {
+        xSemaphoreGive(ui_mutex_);
+    }
 }
 
 void DisplayManager::update_playback_meter(float ratio, bool is_playing)
 {
+    (void)is_playing;
+    if (ui_mutex_ && xSemaphoreTake(ui_mutex_, pdMS_TO_TICKS(20)) != pdTRUE) {
+        return;
+    }
     const float clamped = std::max(0.0f, std::min(1.0f, ratio));
     fill_rect_mem(0, kProgressY - 22, BOARD_LCD_H_RES, 38, kBgColor);
-    fill_rect_mem(0, kControlsY, BOARD_LCD_H_RES, kButtonH + 4, kBgColor);
 
     draw_text(kProgressX, kProgressY - 18, "TRACK PROGRESS", kTextDim, kBgColor, 1);
     char water[20];
@@ -316,42 +342,60 @@ void DisplayManager::update_playback_meter(float ratio, bool is_playing)
                   static_cast<unsigned>(clamped * 100.0f));
     draw_text(kProgressX + kProgressW - 54, kProgressY - 18, water, kTextMain, kBgColor, 1);
     draw_progress_bar(kProgressX, kProgressY, kProgressW, kProgressH, clamped, kGoodColor, kTrackColor);
-    draw_transport_buttons(is_playing, UiControl::None);
-
-    present_area(0, kProgressY - 22, BOARD_LCD_H_RES, (kControlsY + kButtonH + 4) - (kProgressY - 22));
+    present_area(0, kProgressY - 22, BOARD_LCD_H_RES, 38);
+    if (ui_mutex_) {
+        xSemaphoreGive(ui_mutex_);
+    }
 }
 
 void DisplayManager::update_transport_controls(bool is_playing, UiControl highlighted)
 {
+    if (ui_mutex_ && xSemaphoreTake(ui_mutex_, pdMS_TO_TICKS(20)) != pdTRUE) {
+        return;
+    }
     fill_rect_mem(0, kControlsY, BOARD_LCD_H_RES, kButtonH + 4, kBgColor);
     draw_transport_buttons(is_playing, highlighted);
     present_area(0, kControlsY, BOARD_LCD_H_RES, kButtonH + 4);
+    if (ui_mutex_) {
+        xSemaphoreGive(ui_mutex_);
+    }
 }
 
 UiControl DisplayManager::hit_test_control(uint16_t x, uint16_t y) const
 {
-    if (y + kButtonTouchPadY < kControlsY || y > (kControlsY + kButtonH + kButtonTouchPadY)) {
+    const int band_y0 = kControlsY - kButtonTouchPadY;
+    const int band_y1 = kControlsY + kButtonH + kButtonTouchPadY;
+    if (y < band_y0 || y > band_y1) {
         return UiControl::None;
     }
+
     const int total_controls_w = (kButtonW * 3) + (kButtonGap * 2);
     const int start_x = (BOARD_LCD_H_RES - total_controls_w) / 2;
+    const int band_x0 = std::max(0, start_x - 20);
+    const int band_x1 = std::min<int>(BOARD_LCD_H_RES - 1, start_x + total_controls_w + 20);
+    if (x < band_x0 || x > band_x1) {
+        return UiControl::None;
+    }
 
-    if (x + kButtonTouchPadX >= start_x && x <= start_x + kButtonW + kButtonTouchPadX) {
+    const int band_w = band_x1 - band_x0 + 1;
+    const int third_w = band_w / 3;
+    if (x < band_x0 + third_w) {
         return UiControl::Prev;
     }
-    if (x >= start_x + kButtonW + kButtonGap &&
-        x <= start_x + (kButtonW * 2) + kButtonGap + kButtonTouchPadX) {
+    if (x < band_x0 + (third_w * 2)) {
         return UiControl::PlayPause;
     }
-    if (x + kButtonTouchPadX >= start_x + (kButtonW + kButtonGap) * 2 &&
-        x <= start_x + (kButtonW * 3) + (kButtonGap * 2) + kButtonTouchPadX) {
-        return UiControl::Next;
-    }
-    return UiControl::None;
+    return UiControl::Next;
 }
 
 void DisplayManager::animate_gif_placeholder(uint32_t tick)
 {
+    if (!animation_enabled_) {
+        return;
+    }
+    if (ui_mutex_ && xSemaphoreTake(ui_mutex_, pdMS_TO_TICKS(10)) != pdTRUE) {
+        return;
+    }
     const int inner_x = kGifBoxX + kAnimInset;
     const int inner_y = kGifBoxY + kAnimInset;
     const int inner_w = kGifBoxSize - (kAnimInset * 2);
@@ -370,6 +414,9 @@ void DisplayManager::animate_gif_placeholder(uint32_t tick)
     draw_text(kGifBoxX + 48, kGifBoxY + 18, "PET", kTextMain, kPanelColor, 2);
     draw_text(kGifBoxX + 34, kGifBoxY + 128, "ANIMATING", kTextDim, kPanelColor, 1);
     present_area(kGifBoxX + 2, kGifBoxY + 2, kGifBoxSize - 4, kGifBoxSize - 4);
+    if (ui_mutex_) {
+        xSemaphoreGive(ui_mutex_);
+    }
 }
 
 void DisplayManager::present_area(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
@@ -583,6 +630,9 @@ uint8_t DisplayManager::glyph_row(char c, int row)
         case '7': { static const uint8_t p[] = {0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08}; return p[row]; }
         case '8': { static const uint8_t p[] = {0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E}; return p[row]; }
         case '9': { static const uint8_t p[] = {0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x1C}; return p[row]; }
+        case '<': { static const uint8_t p[] = {0x01, 0x02, 0x04, 0x08, 0x04, 0x02, 0x01}; return p[row]; }
+        case '>': { static const uint8_t p[] = {0x10, 0x08, 0x04, 0x02, 0x04, 0x08, 0x10}; return p[row]; }
+        case '|': { static const uint8_t p[] = {0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04}; return p[row]; }
         case '-': { static const uint8_t p[] = {0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00}; return p[row]; }
         case '.': { static const uint8_t p[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C}; return p[row]; }
         case ':': { static const uint8_t p[] = {0x00, 0x0C, 0x0C, 0x00, 0x0C, 0x0C, 0x00}; return p[row]; }

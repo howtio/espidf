@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-06-04 — Phase 3 触摸精确化 + UI 线程安全 + 控件节拍精细调优
+
+- 在上一条触摸节拍化的基础上继续打磨“触摸命中不稳定”的问题
+- `display_manager` 引入 FreeRTOS Mutex (`ui_mutex_`) 保护所有 framebuffer 写操作，避免 UI task 与触控回调竞争屏幕缓冲区
+- `main.cpp` 触摸逻辑从“按下立即触发”改为“按下-释放在同一控件才触发”：
+  - 新增 `pressed_control` 记忆按下时的控件
+  - 新增 `touch_release_samples` 消抖计数器，连续 2 次无触摸才判定为释放
+  - 只在释放时且 `pressed_control == highlighted` 才执行动作
+- 触摸日志更细粒度：
+  - 按下打印 `Control down` / `Touch down outside controls`
+  - 释放打印 `Control tap`
+  - 滑动到不同控件会实时更新高亮
+- UI 节拍重新分配：
+  - 进度条 250ms（原来 250ms 同时刷进度条+控件，分拆开减少闪烁）
+  - 控件按钮 500ms（低频刷新避免与触摸高亮冲突）
+  - GIF 占位动画改为 `500ms`，受 `animation_enabled_` 标志控制
+- `hit_test_control()` 改为等分三段式热区，不再用像素级精确边界，命中更宽容
+- 字体引擎新增 `<` `>` `|` 三个 glyph
+- 改动文件：`main/main.cpp`、`components/display_manager/DisplayManager.hpp`、`components/display_manager/DisplayManager.cpp`、`components/display_manager/CMakeLists.txt`、`main/CMakeLists.txt`
+- 编译结果：`idf.py build` 通过
+- 提交号：待提交
+
+---
+
 ## 2026-06-04 — Phase 3 触摸节拍化 + 传统播放器控件首版
 
 - 按 `CLAUDE.md` / `00_总体施工文档.md` / `04_开发计划.md` 收敛屏幕交互问题，目标是先解决“触摸不工作 / 图标看不见 / 进度条不是歌曲进度”

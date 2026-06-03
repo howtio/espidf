@@ -288,26 +288,27 @@ extern "C" void app_main(void)
     TouchPoint tp;
     bool touch_active = false;
     UiControl highlighted = UiControl::None;
-    uint32_t tick_150ms = 0;
+    UiControl pressed_control = UiControl::None;
+    uint32_t touch_release_samples = 0;
     uint32_t tick_250ms = 0;
+    uint32_t tick_500ms = 0;
     uint32_t tick_5s = 0;
     UiControl last_rendered_highlight = UiControl::None;
     bool last_rendered_playing = false;
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(20));
-        tick_150ms += 20;
         tick_250ms += 20;
+        tick_500ms += 20;
         tick_5s += 20;
-
-        if (tick_150ms >= 150) {
-            tick_150ms = 0;
-            display.animate_gif_placeholder(xTaskGetTickCount() / 3);
-        }
 
         if (tick_250ms >= 250) {
             tick_250ms = 0;
+            display.update_playback_meter(s_audio.track_progress(), s_audio.state() == AudioState::Playing);
+        }
+
+        if (tick_500ms >= 500) {
+            tick_500ms = 0;
             const bool is_playing = s_audio.state() == AudioState::Playing;
-            display.update_playback_meter(s_audio.track_progress(), is_playing);
             if (last_rendered_playing != is_playing || last_rendered_highlight != highlighted) {
                 display.update_transport_controls(is_playing, highlighted);
                 last_rendered_playing = is_playing;
@@ -316,37 +317,52 @@ extern "C" void app_main(void)
         }
 
         if (touch.read_touch(tp)) {
+            touch_release_samples = 0;
             uint16_t mapped_x = tp.x;
             uint16_t mapped_y = tp.y;
             UiControl control = resolve_touch_control(display, tp, mapped_x, mapped_y);
             if (!touch_active) {
                 touch_active = true;
+                pressed_control = control;
                 highlighted = control;
+                display.update_transport_controls(s_audio.state() == AudioState::Playing, highlighted);
+                last_rendered_highlight = highlighted;
+                last_rendered_playing = (s_audio.state() == AudioState::Playing);
                 if (control != UiControl::None) {
-                    display.update_transport_controls(s_audio.state() == AudioState::Playing, highlighted);
-                    last_rendered_highlight = highlighted;
-                    last_rendered_playing = (s_audio.state() == AudioState::Playing);
-                    ESP_LOGI("TOUCH", "[INF] Control press: raw=(%u,%u) mapped=(%u,%u) control=%s",
+                    ESP_LOGI("TOUCH", "[INF] Control down: raw=(%u,%u) mapped=(%u,%u) control=%s",
                              tp.x, tp.y, mapped_x, mapped_y, control_name(control));
-                    if (control == UiControl::PlayPause) {
+                } else {
+                    ESP_LOGI("TOUCH", "[INF] Touch down outside controls: raw=(%u,%u) mapped=(%u,%u)",
+                             tp.x, tp.y, mapped_x, mapped_y);
+                }
+            } else if (highlighted != control) {
+                highlighted = control;
+                display.update_transport_controls(s_audio.state() == AudioState::Playing, highlighted);
+                last_rendered_highlight = highlighted;
+                last_rendered_playing = (s_audio.state() == AudioState::Playing);
+            }
+        } else {
+            touch_release_samples++;
+            if (touch_active && touch_release_samples >= 2) {
+                touch_active = false;
+                if (pressed_control != UiControl::None && highlighted == pressed_control) {
+                    ESP_LOGI("TOUCH", "[INF] Control tap: %s", control_name(pressed_control));
+                    if (pressed_control == UiControl::PlayPause) {
                         s_audio.toggle_pause();
-                    } else if (control == UiControl::Next) {
+                    } else if (pressed_control == UiControl::Next) {
                         s_transport_command = TransportCommand::Next;
                         s_audio.stop();
-                    } else if (control == UiControl::Prev) {
+                    } else if (pressed_control == UiControl::Prev) {
                         s_transport_command = TransportCommand::Prev;
                         s_audio.stop();
                     }
-                } else {
-                    ESP_LOGI("TOUCH", "[INF] Touch outside controls: raw=(%u,%u)", tp.x, tp.y);
                 }
+                highlighted = UiControl::None;
+                pressed_control = UiControl::None;
+                display.update_transport_controls(s_audio.state() == AudioState::Playing, highlighted);
+                last_rendered_highlight = highlighted;
+                last_rendered_playing = (s_audio.state() == AudioState::Playing);
             }
-        } else if (touch_active) {
-            touch_active = false;
-            highlighted = UiControl::None;
-            display.update_transport_controls(s_audio.state() == AudioState::Playing, highlighted);
-            last_rendered_highlight = highlighted;
-            last_rendered_playing = (s_audio.state() == AudioState::Playing);
         }
 
         if (tick_5s >= 5000) {

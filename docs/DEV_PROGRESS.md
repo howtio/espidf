@@ -41,13 +41,15 @@
 - [x] 触摸轮询已从 `5s` 级别改成 `20ms` UI 节拍，实机串口已收到真实触摸坐标日志
 - [x] 底部控件已切成传统播放器样式：`|<< / || / >>|`，并接入 `pause / next / prev` 最小控制通路
 - [x] 进度条已从 `PCM BUFFER` 升级为歌曲进度近似值显示
+- [x] 触摸逻辑已从“按下即触发”改为“按下-释放在同一控件才触发”，增加消抖和滑动高亮追踪
+- [x] `display_manager` 已引入 FreeRTOS Mutex 保护 framebuffer 并发写
+- [x] UI 刷新节拍已分拆为：进度条 250ms、控件 500ms、状态栏 5s，减少触摸冲突
 
 ## 下一步
 1. 把真实 GIF 源 `/home/howtion/biliesp/ui.gif` 接进工程，建立预处理和播放链路
-2. 继续调底部控件热区和触摸坐标方向，让 `prev/pause/next` 实机命中更稳
-3. 将 `touch_manager`、`storage_manager`、`main` 统一收敛到 `config/board_config.h`
-4. 补 ButtonManager、更真实的 SystemMonitor 电池读取
-5. 开始按文档推进 App FSM / Queue 化重构
+2. 将 `touch_manager`、`storage_manager`、`main` 统一收敛到 `config/board_config.h`
+3. 补 ButtonManager、更真实的 SystemMonitor 电池读取
+4. 开始按文档推进 App FSM / Queue 化重构
 
 ## 遗留问题
 
