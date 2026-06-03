@@ -7,6 +7,7 @@
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <cstring>
 
 #define LCD_HOST SPI2_HOST
 #define I2C_HOST I2C_NUM_0
@@ -74,28 +75,30 @@ bool DisplayManager::init()
 
     // QSPI bus (field order must match spi_bus_config_t)
     ESP_LOGI("LCD", "Initializing QSPI bus...");
-    spi_bus_config_t bus_cfg = {
-        .data0_io_num = PIN_LCD_D0,
-        .data1_io_num = PIN_LCD_D1,
-        .sclk_io_num = PIN_LCD_PCLK,
-        .data2_io_num = PIN_LCD_D2,
-        .data3_io_num = PIN_LCD_D3,
-        .max_transfer_sz = LCD_H_RES * LCD_V_RES * LCD_BPP / 8,
-    };
+    spi_bus_config_t bus_cfg = {};
+    bus_cfg.data0_io_num = PIN_LCD_D0;
+    bus_cfg.data1_io_num = PIN_LCD_D1;
+    bus_cfg.sclk_io_num = PIN_LCD_PCLK;
+    bus_cfg.data2_io_num = PIN_LCD_D2;
+    bus_cfg.data3_io_num = PIN_LCD_D3;
+    bus_cfg.data4_io_num = -1;
+    bus_cfg.data5_io_num = -1;
+    bus_cfg.data6_io_num = -1;
+    bus_cfg.data7_io_num = -1;
+    bus_cfg.max_transfer_sz = LCD_H_RES * LCD_V_RES * LCD_BPP / 8;
     ESP_ERROR_CHECK(spi_bus_initialize(LCD_HOST, &bus_cfg, SPI_DMA_CH_AUTO));
 
     // Panel IO (field order must match esp_lcd_panel_io_spi_config_t)
     ESP_LOGI("LCD", "Installing panel IO...");
-    esp_lcd_panel_io_spi_config_t io_cfg = {
-        .cs_gpio_num = PIN_LCD_CS,
-        .dc_gpio_num = -1,
-        .spi_mode = 0,
-        .pclk_hz = 40 * 1000 * 1000,
-        .trans_queue_depth = 10,
-        .lcd_cmd_bits = 32,
-        .lcd_param_bits = 8,
-        .flags = { .quad_mode = true },
-    };
+    esp_lcd_panel_io_spi_config_t io_cfg = {};
+    io_cfg.cs_gpio_num = PIN_LCD_CS;
+    io_cfg.dc_gpio_num = -1;
+    io_cfg.spi_mode = 0;
+    io_cfg.pclk_hz = 40 * 1000 * 1000;
+    io_cfg.trans_queue_depth = 10;
+    io_cfg.lcd_cmd_bits = 32;
+    io_cfg.lcd_param_bits = 8;
+    io_cfg.flags.quad_mode = true;
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)LCD_HOST, &io_cfg, &io_));
 
     // Panel
@@ -105,12 +108,12 @@ bool DisplayManager::init()
         .init_cmds_size = sizeof(lcd_init_cmds) / sizeof(lcd_init_cmds[0]),
         .flags = { .use_qspi_interface = 1 },
     };
-    esp_lcd_panel_dev_config_t panel_cfg = {
-        .reset_gpio_num = -1,  // Reset handled by IO expander
-        .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_BGR,
-        .bits_per_pixel = LCD_BPP,
-        .vendor_config = &vendor_cfg,
-    };
+    esp_lcd_panel_dev_config_t panel_cfg = {};
+    panel_cfg.reset_gpio_num = -1;  // Reset handled by IO expander
+    panel_cfg.rgb_ele_order = LCD_RGB_ELEMENT_ORDER_BGR;
+    panel_cfg.data_endian = LCD_RGB_DATA_ENDIAN_BIG;
+    panel_cfg.bits_per_pixel = LCD_BPP;
+    panel_cfg.vendor_config = &vendor_cfg;
     ESP_ERROR_CHECK(esp_lcd_new_panel_sh8601(io_, &panel_cfg, &panel_));
 
     ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_));

@@ -1,6 +1,7 @@
 /**
  * ESP32 MP3 Player — 主入口
  */
+#include <string>
 #include "esp_log.h"
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
@@ -14,8 +15,17 @@
 #include "StorageManager.hpp"
 #include "Playlist.hpp"
 #include "AudioPlayer.hpp"
+#include "MemoryPool.hpp"
 
 static const char* TAG = "MAIN";
+
+enum class StartupAudioMode {
+    TestTone,
+    Playlist,
+    TestThenPlaylist,
+};
+
+static constexpr StartupAudioMode kStartupAudioMode = StartupAudioMode::TestThenPlaylist;
 
 #define I2C_HOST I2C_NUM_0
 #define I2C_SCL  GPIO_NUM_14
@@ -44,22 +54,69 @@ struct AudioTaskCtx {
     Playlist* playlist;
 };
 
+static AudioPlayer s_audio;
+static Playlist s_playlist;
+
+static void play_playlist_loop(AudioTaskCtx* ctx, const char* log_prefix)
+{
+    if (ctx->playlist->is_empty()) {
+        ESP_LOGW("AUDIO", "[WRN] %s skipped: playlist empty", log_prefix);
+        return;
+    }
+
+    const size_t total = ctx->playlist->total_count();
+    size_t played_count = 0;
+
+    while (true) {
+        const SongInfo* song = ctx->playlist->current();
+        if (!song) {
+            ESP_LOGE("AUDIO", "[ERR] %s current song is null", log_prefix);
+            return;
+        }
+
+        ESP_LOGI("AUDIO", "[INF] %s track %u/%u: %s",
+                 log_prefix,
+                 (unsigned)(ctx->playlist->current_index() + 1),
+                 (unsigned)total,
+                 song->filename.c_str());
+
+        bool ok = ctx->audio->play_file(song->filename);
+        ESP_LOGI("AUDIO", "[INF] Track finished: %s (%s)",
+                 song->filename.c_str(),
+                 ok ? "ok" : "error");
+
+        played_count++;
+        const SongInfo* next_song = ctx->playlist->next();
+        if (!next_song) {
+            ESP_LOGW("AUDIO", "[WRN] Playlist next() returned null, stop loop");
+            return;
+        }
+
+        if ((played_count % total) == 0) {
+            ESP_LOGI("AUDIO", "[INF] Playlist loop complete, wrapping to first track");
+        }
+    }
+}
+
 static void audio_task(void* arg)
 {
     AudioTaskCtx* ctx = (AudioTaskCtx*)arg;
     ESP_LOGI("AUDIO", "Audio task started");
 
-    // Skip all tests, go straight to MP3
-    ESP_LOGI("AUDIO", "Playing MP3...");
-
-    if (ctx->playlist->total_count() > 0) {
-        auto* song = ctx->playlist->current();
-        if (song) {
-            ESP_LOGI("AUDIO", "Playing: %s", song->filename.c_str());
-            ctx->audio->play_file(song->filename);
-        }
+    if (kStartupAudioMode == StartupAudioMode::TestTone) {
+        ESP_LOGI("AUDIO", "[INF] Startup mode: test tone baseline");
+        ctx->audio->play_test_tone(1000, 2000);
+    } else if (kStartupAudioMode == StartupAudioMode::TestThenPlaylist) {
+        ESP_LOGI("AUDIO", "[INF] Startup mode: test tone -> playlist A/B");
+        ctx->audio->play_test_tone(1000, 2000);
+        play_playlist_loop(ctx, "A/B step 2");
+    } else if (ctx->playlist->total_count() > 0) {
+        ESP_LOGI("AUDIO", "[INF] Startup mode: SD playlist");
+        play_playlist_loop(ctx, "Playlist");
+    } else {
+        ESP_LOGW("AUDIO", "[WRN] No MP3 found on SD card, fallback to test tone");
+        ctx->audio->play_test_tone(1000, 2000);
     }
-    ESP_LOGI("AUDIO", "Audio task done");
     ESP_LOGI("AUDIO", "Audio task done");
     vTaskDelete(NULL);
 }
@@ -92,6 +149,12 @@ extern "C" void app_main(void)
     // --- I2C Scan ---
     scan_i2c_bus();
 
+    SystemMonitor& monitor = SystemMonitor::instance();
+    MemoryPool& memory_pool = MemoryPool::instance();
+    monitor.init(nullptr);
+    memory_pool.init();
+    monitor.print_boot_banner();
+
     // --- Display ---
     DisplayManager display;
     if (display.init()) {
@@ -111,33 +174,33 @@ extern "C" void app_main(void)
 
     // --- SD Card ---
     StorageManager sd;
-    Playlist playlist;
     if (sd.init()) {
         ESP_LOGI(TAG, "SD Card: mounted OK");
         auto songs = sd.scan_mp3_files("/sdcard/music");
-        playlist.load(songs);
-        ESP_LOGI(TAG, "Playlist: %zu songs loaded", playlist.total_count());
+        s_playlist.load(songs);
+        ESP_LOGI(TAG, "Playlist: %zu songs loaded", s_playlist.total_count());
     } else {
         ESP_LOGE(TAG, "SD Card: mount FAILED");
     }
 
     // --- Audio init in main task ---
-    AudioPlayer* audio = (AudioPlayer*)malloc(sizeof(AudioPlayer));
-    if (audio) {
-        AudioPlayerConfig cfg;
-        bool ok = audio->init(cfg, nullptr, nullptr);
-        ESP_LOGI(TAG, "Audio init: %s", ok ? "OK" : "FAILED");
-
-        // Start audio playback in a separate task with large stack
-        AudioTaskCtx* ctx = (AudioTaskCtx*)malloc(sizeof(AudioTaskCtx));
-        ctx->audio = audio;
-        ctx->playlist = &playlist;
-        xTaskCreatePinnedToCore(audio_task, "audio", 16384, ctx, 10, NULL, 0);  // Core 0, highest priority
+    AudioPlayerConfig cfg;
+    bool ok = s_audio.init(cfg, nullptr, nullptr);
+    ESP_LOGI(TAG, "Audio init: %s", ok ? "OK" : "FAILED");
+    if (ok) {
+        const char* startup_mode = "playlist";
+        if (kStartupAudioMode == StartupAudioMode::TestTone) {
+            startup_mode = "test-tone";
+        } else if (kStartupAudioMode == StartupAudioMode::TestThenPlaylist) {
+            startup_mode = "test-then-playlist";
+        }
+        ESP_LOGI(TAG, "Audio startup mode: %s", startup_mode);
+        static AudioTaskCtx ctx {
+            .audio = &s_audio,
+            .playlist = &s_playlist,
+        };
+        xTaskCreatePinnedToCore(audio_task, "audio", 32768, &ctx, 10, NULL, 0);
     }
-
-    // --- System Monitor ---
-    SystemMonitor& monitor = SystemMonitor::instance();
-    monitor.init(nullptr);
 
     ESP_LOGI(TAG, "Init complete. System running...");
 
@@ -146,6 +209,7 @@ extern "C" void app_main(void)
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(5000));
         ESP_LOGI(TAG, "Heartbeat: alive");
+        monitor.print_status(monitor.collect());
         if (touch.read_touch(tp)) {
             ESP_LOGI(TAG, "Touch: x=%u y=%u pressed=%d", tp.x, tp.y, tp.pressed);
         }

@@ -15,4 +15,8 @@ public:
     size_t sram_total_allocated() const;
     size_t psram_free() const;
     size_t sram_free() const;
+
+private:
+    size_t psram_allocated_ = 0;
+    size_t sram_allocated_ = 0;
 };
