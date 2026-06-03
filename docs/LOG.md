@@ -24,7 +24,7 @@
 - 字体引擎新增 `<` `>` `|` 三个 glyph
 - 改动文件：`main/main.cpp`、`components/display_manager/DisplayManager.hpp`、`components/display_manager/DisplayManager.cpp`、`components/display_manager/CMakeLists.txt`、`main/CMakeLists.txt`
 - 编译结果：`idf.py build` 通过
-- 提交号：待提交
+- 提交号：`92ee9c2`
 
 ---
 
