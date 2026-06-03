@@ -6,7 +6,7 @@
 
 ## 当前版本：0.1.0
 
-## 当前 Phase：Phase 2 — 实机音频调试收敛中
+## 当前 Phase：Phase 3 — 音频保活下的显示骨架落地
 
 ## 已完成
 
@@ -35,19 +35,25 @@
 - [x] `PCM RingBuf(PSRAM)` 已落地，当前实机可打印真实 `PCM water=%` 水位日志
 - [x] 启动后已支持测试音 A/B 后进入连续 MP3 播放，并具备自动下一首/循环回第一首的最小闭环
 - [x] `memory_pool` / `system_monitor` 已补最小可用实现，可打印内存与电源占位日志
+- [x] `display_manager` 已从“测试线”升级为最小稳定 UI：顶部状态栏、GIF 占位区、歌曲信息区、PCM 水位条、控制按钮区
+- [x] 显示链路已按 `PSRAM Framebuffer + SRAM FlushBuf + QSPI DMA` 结构运行，实机串口已确认局刷日志稳定输出
+- [x] 屏幕刷新已接入真实歌曲名和周期状态栏更新，同时未打断现有音频播放链路
+- [x] 触摸轮询已从 `5s` 级别改成 `20ms` UI 节拍，实机串口已收到真实触摸坐标日志
+- [x] 底部控件已切成传统播放器样式：`|<< / || / >>|`，并接入 `pause / next / prev` 最小控制通路
+- [x] 进度条已从 `PCM BUFFER` 升级为歌曲进度近似值显示
 
 ## 下一步
-1. 把 A/B 启动模式收敛成可切换配置，固定一套用于音质验证，一套用于正常 MP3 回归
-2. 将 `display_manager`、`touch_manager`、`storage_manager`、`main` 统一收敛到 `config/board_config.h`
-3. 补播放控制命令：`play/stop/next/prev/volume`，让音乐链路从“自动顺播”进入“外部可控”
-4. 补 ButtonManager、GifPlayer、更真实的 SystemMonitor 电池读取
+1. 把真实 GIF 源 `/home/howtion/biliesp/ui.gif` 接进工程，建立预处理和播放链路
+2. 继续调底部控件热区和触摸坐标方向，让 `prev/pause/next` 实机命中更稳
+3. 将 `touch_manager`、`storage_manager`、`main` 统一收敛到 `config/board_config.h`
+4. 补 ButtonManager、更真实的 SystemMonitor 电池读取
 5. 开始按文档推进 App FSM / Queue 化重构
 
 ## 遗留问题
 
-- [ ] GitHub 仓库尚未创建
 - [ ] 板载喇叭是否已经真实出声仍需现场听感确认；当前只能从串口确认 PCM/I2S/Codec 链路在跑
 - [ ] `button_manager` / `gif_player` 仍是占位实现
+- [ ] 真实 `ui.gif` 仍未进入运行时显示链路，当前 GIF 区域还是占位动画
 - [ ] `system_monitor` 目前电池数据仍为占位值，未接入 AXP2101
 - [ ] 触摸控制器当前能响应初始化，但 `FT3168 Device ID` 读回 `0x00`，仍需核实是否为兼容变体或寄存器读取差异
 - [ ] 整体控制流仍未完成文档中的 App FSM / Queue 架构

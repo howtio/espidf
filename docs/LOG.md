@@ -4,6 +4,61 @@
 
 ---
 
+## 2026-06-04 — Phase 3 触摸节拍化 + 传统播放器控件首版
+
+- 按 `CLAUDE.md` / `00_总体施工文档.md` / `04_开发计划.md` 收敛屏幕交互问题，目标是先解决“触摸不工作 / 图标看不见 / 进度条不是歌曲进度”
+- 本轮确认：
+- 触摸总线不是坏的，根因主要是之前主循环 `5s` 才读一次触摸，天然抓不到正常点击
+- 底部控件原来热区过紧，且 5x7 文本图标过小，在 AMOLED 上几乎不可见
+- `main.cpp` 侧改动：
+- 主循环从单一 `5s heartbeat` 改为多节拍 UI loop
+- 触摸轮询节拍改为 `20ms`
+- 动画节拍改为 `150ms`
+- 进度条节拍改为 `250ms`
+- 状态栏/心跳仍保留 `5s`
+- 新增触摸控制解析：
+- 支持底部 `Prev / PlayPause / Next` 热区命中
+- 兼容触摸坐标旋转候选，优先命中可点击控件
+- 点中后立即打印控制日志，并触发：
+- `PlayPause` → `AudioPlayer::toggle_pause()`
+- `Next/Prev` → 设置传输命令并请求当前播放停止切歌
+- `audio_player` 侧改动：
+- 增加 `track_progress()` 与 `elapsed_seconds()` 基础状态
+- 增加 `toggle_pause()`
+- `stop()` 改为“请求停止”，避免直接关 I2S 导致播放循环异常
+- `play_file()` / `play_test_tone()` 内部现在会检查 `pause/stop`
+- 歌曲进度当前先用文件读取位置近似，不再显示 `PCM BUFFER`
+- `display_manager` 侧改动：
+- 底部按钮改成传统播放器样式 ASCII 图标：
+- `|<<`
+- `|| / >|`
+- `>>|`
+- 图标绘制放大为 `2x scale`
+- 触摸热区增加 `x/y` padding，解决“点到按钮边缘无响应”
+- 进度条文案由 `PCM BUFFER` 改为 `TRACK PROGRESS`
+- 继续保留 GIF 区域动画占位，但明确这还不是真正 `ui.gif` 解码播放
+- 实机串口验证结果：
+- 启动、音频、屏幕链路都稳定
+- 首次新增 UI 轮询版本下，已经收到真实触摸日志：
+- `TOUCH: [INF] Touch outside controls: raw=(345,201)`
+- `TOUCH: [INF] Touch outside controls: raw=(195,429)`
+- 这证明：
+- 触摸 I2C 和高频轮询已生效
+- 当前剩余问题已经不是“触摸无数据”，而是“控件热区和图标可见性需要继续打磨”
+- 本轮额外确认 GIF 源文件：
+- 施工文档侧真实源资源现确认为 `/home/howtion/biliesp/ui.gif`
+- 该文件属性：`GIF89a, 720x720, 1.9MB`
+- 当前代码里的中间动画仍是占位动画，不是最终 `ui.gif`
+- 结论：
+- 触摸链路已从“几乎不可用”推进到“有真实点击日志和控制通路”
+- 歌曲进度条已从缓冲条改为曲目进度近似值
+- 传统播放器控件已上屏，但真正的 `ui.gif` 解码播放仍是下一步重点
+- 改动文件：`main/main.cpp`、`components/audio_player/AudioPlayer.hpp`、`components/audio_player/AudioPlayer.cpp`、`components/display_manager/DisplayManager.hpp`、`components/display_manager/DisplayManager.cpp`
+- 编译结果：`idf.py build` 通过；已重新烧录到 `/dev/ttyACM0`
+- 提交号：待提交
+
+---
+
 ## 2026-06-04 — Phase 2 最小启动链路收敛
 
 - 修复当前工程编译阻塞，`idf.py build` 已通过

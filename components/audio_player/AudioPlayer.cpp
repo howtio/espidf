@@ -298,6 +298,9 @@ bool AudioPlayer::play_file(const std::string& path)
     Mp3Decoder dec;
     dec.init();
     reset_pcm_ring();
+    stop_requested_ = false;
+    track_progress_ = 0.0f;
+    elapsed_seconds_ = 0;
 
     state_ = AudioState::Playing;
     ESP_LOGI(TAG, "Starting streaming playback...");
@@ -307,8 +310,26 @@ bool AudioPlayer::play_file(const std::string& path)
     int total_samples = 0;
     const size_t mp3_buf_capacity = cfg_.mp3_read_buffer_size;
     const size_t pcm_out_chunk_bytes = pcm_stereo_buf_samples_ * sizeof(int16_t);
+    fseek(f, 0, SEEK_END);
+    const long file_size = ftell(f);
+    fseek(f, 0, SEEK_SET);
 
     while (true) {
+        if (stop_requested_) {
+            ESP_LOGI(TAG, "[INF] Playback stop requested");
+            break;
+        }
+        while (state_ == AudioState::Paused) {
+            vTaskDelay(pdMS_TO_TICKS(30));
+            if (stop_requested_) {
+                break;
+            }
+        }
+        if (stop_requested_) {
+            ESP_LOGI(TAG, "[INF] Playback stop requested while paused");
+            break;
+        }
+
         if (!eof && mp3_off < mp3_buf_capacity) {
             size_t rd = fread(mp3_read_buf_ + mp3_off, 1, mp3_buf_capacity - mp3_off, f);
             if (rd == 0) {
@@ -348,6 +369,14 @@ bool AudioPlayer::play_file(const std::string& path)
             ESP_LOGW(TAG, "MP3 sample rate=%dHz, output fixed at %dHz; adjust assets or config if pitch is wrong",
                      pcm.sample_rate, cfg_.sample_rate);
         }
+
+        const long file_pos = ftell(f);
+        if (file_size > 0 && file_pos >= 0) {
+            track_progress_ = std::min(1.0f, std::max(0.0f, static_cast<float>(file_pos) / static_cast<float>(file_size)));
+        }
+        elapsed_seconds_ = cfg_.sample_rate > 0
+            ? static_cast<uint32_t>(total_samples / cfg_.sample_rate)
+            : 0;
 
         while (!pcm_ring_write_frame(pcm)) {
             size_t bytes_from_ring = pcm_ring_read_bytes(reinterpret_cast<uint8_t*>(pcm_stereo_buf_), pcm_out_chunk_bytes);
@@ -402,6 +431,9 @@ bool AudioPlayer::play_file(const std::string& path)
     }
 
     while (pcm_ring_level_bytes_ > 0) {
+        if (stop_requested_) {
+            break;
+        }
         size_t bytes_from_ring = pcm_ring_read_bytes(reinterpret_cast<uint8_t*>(pcm_stereo_buf_), pcm_out_chunk_bytes);
         if (bytes_from_ring == 0) {
             break;
@@ -421,6 +453,9 @@ bool AudioPlayer::play_file(const std::string& path)
 
     fclose(f);
     dec.deinit();
+    stop_requested_ = false;
+    track_progress_ = 0.0f;
+    elapsed_seconds_ = 0;
     ESP_LOGI(TAG, "Playback done: %d frames, %.1fs audio", frames, cfg_.sample_rate > 0 ? (float)total_samples / cfg_.sample_rate : 0.0f);
     state_ = AudioState::Stopped;
     return true;
@@ -429,6 +464,9 @@ bool AudioPlayer::play_file(const std::string& path)
 bool AudioPlayer::play_test_tone(int frequency_hz, int duration_ms)
 {
     ESP_LOGI(TAG, "[INF] Test tone start: %dHz %dms @ %dHz output", frequency_hz, duration_ms, cfg_.sample_rate);
+    stop_requested_ = false;
+    track_progress_ = 0.0f;
+    elapsed_seconds_ = 0;
     state_ = AudioState::Playing;
 
     constexpr int kFramesPerChunk = 512;
@@ -438,6 +476,16 @@ bool AudioPlayer::play_test_tone(int frequency_hz, int duration_ms)
     int chunk_index = 0;
 
     while (generated_frames < total_frames) {
+        if (stop_requested_) {
+            ESP_LOGI(TAG, "[INF] Test tone stop requested");
+            break;
+        }
+        while (state_ == AudioState::Paused) {
+            vTaskDelay(pdMS_TO_TICKS(30));
+            if (stop_requested_) {
+                break;
+            }
+        }
         const int frames_this_chunk = std::min(kFramesPerChunk, total_frames - generated_frames);
         for (int j = 0; j < frames_this_chunk; ++j) {
             float t = static_cast<float>(generated_frames + j) / cfg_.sample_rate;
@@ -456,10 +504,19 @@ bool AudioPlayer::play_test_tone(int frequency_hz, int duration_ms)
         }
 
         generated_frames += frames_this_chunk;
+        track_progress_ = total_frames > 0
+            ? static_cast<float>(generated_frames) / static_cast<float>(total_frames)
+            : 0.0f;
+        elapsed_seconds_ = cfg_.sample_rate > 0
+            ? static_cast<uint32_t>(generated_frames / cfg_.sample_rate)
+            : 0;
         chunk_index++;
     }
 
     state_ = AudioState::Stopped;
+    stop_requested_ = false;
+    track_progress_ = 0.0f;
+    elapsed_seconds_ = 0;
     ESP_LOGI(TAG, "[INF] Test tone done: %d frames, %d chunks", generated_frames, chunk_index);
     return true;
 }
@@ -471,8 +528,18 @@ bool AudioPlayer::play_pcm(const std::string& path)
 
 void AudioPlayer::stop()
 {
-    state_ = AudioState::Stopped;
-    i2s_channel_disable((i2s_chan_handle_t)tx_handle_);
+    stop_requested_ = true;
+}
+
+void AudioPlayer::toggle_pause()
+{
+    if (state_ == AudioState::Playing) {
+        state_ = AudioState::Paused;
+        ESP_LOGI(TAG, "[INF] Playback paused");
+    } else if (state_ == AudioState::Paused) {
+        state_ = AudioState::Playing;
+        ESP_LOGI(TAG, "[INF] Playback resumed");
+    }
 }
 
 void AudioPlayer::set_volume(int vol)

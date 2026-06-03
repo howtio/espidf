@@ -22,6 +22,8 @@ public:
     void deinit();
     AudioState state() const { return state_; }
     float pcm_water_level() const { return pcm_water_level_; }
+    float track_progress() const { return track_progress_; }
+    uint32_t elapsed_seconds() const { return elapsed_seconds_; }
     int current_volume() const { return volume_; }
     void task_loop();
 
@@ -29,6 +31,7 @@ public:
     bool play_test_tone(int frequency_hz = 1000, int duration_ms = 2000);
     bool play_pcm(const std::string& path);
     void stop();
+    void toggle_pause();
     void set_volume(int vol);
 
 private:
@@ -48,6 +51,9 @@ private:
     int16_t* pcm_stereo_buf_ = nullptr;
     size_t pcm_stereo_buf_samples_ = 0;
     float pcm_water_level_ = 0.0f;
+    float track_progress_ = 0.0f;
+    uint32_t elapsed_seconds_ = 0;
+    bool stop_requested_ = false;
 
     bool init_i2s();
     bool init_codec();

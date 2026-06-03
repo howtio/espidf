@@ -19,6 +19,12 @@
 
 static const char* TAG = "MAIN";
 
+enum class TransportCommand {
+    None = 0,
+    Next,
+    Prev,
+};
+
 enum class StartupAudioMode {
     TestTone,
     Playlist,
@@ -52,10 +58,49 @@ static void scan_i2c_bus()
 struct AudioTaskCtx {
     AudioPlayer* audio;
     Playlist* playlist;
+    DisplayManager* display;
 };
 
 static AudioPlayer s_audio;
 static Playlist s_playlist;
+static volatile TransportCommand s_transport_command = TransportCommand::None;
+
+static const char* control_name(UiControl control)
+{
+    switch (control) {
+        case UiControl::Prev: return "Prev";
+        case UiControl::PlayPause: return "PlayPause";
+        case UiControl::Next: return "Next";
+        case UiControl::None:
+        default: return "None";
+    }
+}
+
+static UiControl resolve_touch_control(const DisplayManager& display, const TouchPoint& pt, uint16_t& out_x, uint16_t& out_y)
+{
+    struct Candidate { uint16_t x; uint16_t y; };
+    const uint16_t w = display.screen_width();
+    const uint16_t h = display.screen_height();
+    const Candidate candidates[] = {
+        {pt.x, pt.y},
+        {pt.y, static_cast<uint16_t>(pt.x < h ? (h - 1 - pt.x) : 0)},
+        {static_cast<uint16_t>(pt.x < w ? (w - 1 - pt.x) : 0), static_cast<uint16_t>(pt.y < h ? (h - 1 - pt.y) : 0)},
+        {static_cast<uint16_t>(pt.y < w ? (w - 1 - pt.y) : 0), pt.x},
+    };
+
+    for (const Candidate& c : candidates) {
+        UiControl control = display.hit_test_control(c.x, c.y);
+        if (control != UiControl::None) {
+            out_x = c.x;
+            out_y = c.y;
+            return control;
+        }
+    }
+
+    out_x = pt.x;
+    out_y = pt.y;
+    return UiControl::None;
+}
 
 static void play_playlist_loop(AudioTaskCtx* ctx, const char* log_prefix)
 {
@@ -79,6 +124,12 @@ static void play_playlist_loop(AudioTaskCtx* ctx, const char* log_prefix)
                  (unsigned)(ctx->playlist->current_index() + 1),
                  (unsigned)total,
                  song->filename.c_str());
+        if (ctx->display) {
+            ctx->display->update_now_playing(song->filename.c_str(),
+                                             ctx->playlist->current_index(),
+                                             total);
+            ctx->display->update_playback_meter(ctx->audio->pcm_water_level(), true);
+        }
 
         bool ok = ctx->audio->play_file(song->filename);
         ESP_LOGI("AUDIO", "[INF] Track finished: %s (%s)",
@@ -86,7 +137,18 @@ static void play_playlist_loop(AudioTaskCtx* ctx, const char* log_prefix)
                  ok ? "ok" : "error");
 
         played_count++;
-        const SongInfo* next_song = ctx->playlist->next();
+        TransportCommand pending = s_transport_command;
+        s_transport_command = TransportCommand::None;
+        const SongInfo* next_song = nullptr;
+        if (pending == TransportCommand::Prev) {
+            ESP_LOGI("AUDIO", "[INF] Transport command: previous");
+            next_song = ctx->playlist->prev();
+        } else {
+            if (pending == TransportCommand::Next) {
+                ESP_LOGI("AUDIO", "[INF] Transport command: next");
+            }
+            next_song = ctx->playlist->next();
+        }
         if (!next_song) {
             ESP_LOGW("AUDIO", "[WRN] Playlist next() returned null, stop loop");
             return;
@@ -105,9 +167,19 @@ static void audio_task(void* arg)
 
     if (kStartupAudioMode == StartupAudioMode::TestTone) {
         ESP_LOGI("AUDIO", "[INF] Startup mode: test tone baseline");
+        if (ctx->display) {
+            ctx->display->update_now_playing("TEST TONE 1KHZ", 0, 0);
+            ctx->display->update_playback_meter(0.0f, true);
+            ctx->display->update_transport_controls(true, UiControl::None);
+        }
         ctx->audio->play_test_tone(1000, 2000);
     } else if (kStartupAudioMode == StartupAudioMode::TestThenPlaylist) {
         ESP_LOGI("AUDIO", "[INF] Startup mode: test tone -> playlist A/B");
+        if (ctx->display) {
+            ctx->display->update_now_playing("TEST TONE 1KHZ", 0, 0);
+            ctx->display->update_playback_meter(0.0f, true);
+            ctx->display->update_transport_controls(true, UiControl::None);
+        }
         ctx->audio->play_test_tone(1000, 2000);
         play_playlist_loop(ctx, "A/B step 2");
     } else if (ctx->playlist->total_count() > 0) {
@@ -162,6 +234,13 @@ extern "C" void app_main(void)
     } else {
         ESP_LOGE(TAG, "Display init FAILED");
     }
+    SystemStatus boot_status = monitor.collect();
+    boot_status.pcm_water_level = s_audio.pcm_water_level();
+    display.update_status_bar(boot_status.battery_percent,
+                              boot_status.is_charging,
+                              boot_status.sram_free,
+                              boot_status.psram_free,
+                              boot_status.pcm_water_level);
 
     // --- Touch ---
     QueueHandle_t event_queue = xQueueCreate(16, sizeof(uint32_t));
@@ -198,6 +277,7 @@ extern "C" void app_main(void)
         static AudioTaskCtx ctx {
             .audio = &s_audio,
             .playlist = &s_playlist,
+            .display = &display,
         };
         xTaskCreatePinnedToCore(audio_task, "audio", 32768, &ctx, 10, NULL, 0);
     }
@@ -206,12 +286,80 @@ extern "C" void app_main(void)
 
     // Main loop
     TouchPoint tp;
+    bool touch_active = false;
+    UiControl highlighted = UiControl::None;
+    uint32_t tick_150ms = 0;
+    uint32_t tick_250ms = 0;
+    uint32_t tick_5s = 0;
+    UiControl last_rendered_highlight = UiControl::None;
+    bool last_rendered_playing = false;
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(5000));
-        ESP_LOGI(TAG, "Heartbeat: alive");
-        monitor.print_status(monitor.collect());
+        vTaskDelay(pdMS_TO_TICKS(20));
+        tick_150ms += 20;
+        tick_250ms += 20;
+        tick_5s += 20;
+
+        if (tick_150ms >= 150) {
+            tick_150ms = 0;
+            display.animate_gif_placeholder(xTaskGetTickCount() / 3);
+        }
+
+        if (tick_250ms >= 250) {
+            tick_250ms = 0;
+            const bool is_playing = s_audio.state() == AudioState::Playing;
+            display.update_playback_meter(s_audio.track_progress(), is_playing);
+            if (last_rendered_playing != is_playing || last_rendered_highlight != highlighted) {
+                display.update_transport_controls(is_playing, highlighted);
+                last_rendered_playing = is_playing;
+                last_rendered_highlight = highlighted;
+            }
+        }
+
         if (touch.read_touch(tp)) {
-            ESP_LOGI(TAG, "Touch: x=%u y=%u pressed=%d", tp.x, tp.y, tp.pressed);
+            uint16_t mapped_x = tp.x;
+            uint16_t mapped_y = tp.y;
+            UiControl control = resolve_touch_control(display, tp, mapped_x, mapped_y);
+            if (!touch_active) {
+                touch_active = true;
+                highlighted = control;
+                if (control != UiControl::None) {
+                    display.update_transport_controls(s_audio.state() == AudioState::Playing, highlighted);
+                    last_rendered_highlight = highlighted;
+                    last_rendered_playing = (s_audio.state() == AudioState::Playing);
+                    ESP_LOGI("TOUCH", "[INF] Control press: raw=(%u,%u) mapped=(%u,%u) control=%s",
+                             tp.x, tp.y, mapped_x, mapped_y, control_name(control));
+                    if (control == UiControl::PlayPause) {
+                        s_audio.toggle_pause();
+                    } else if (control == UiControl::Next) {
+                        s_transport_command = TransportCommand::Next;
+                        s_audio.stop();
+                    } else if (control == UiControl::Prev) {
+                        s_transport_command = TransportCommand::Prev;
+                        s_audio.stop();
+                    }
+                } else {
+                    ESP_LOGI("TOUCH", "[INF] Touch outside controls: raw=(%u,%u)", tp.x, tp.y);
+                }
+            }
+        } else if (touch_active) {
+            touch_active = false;
+            highlighted = UiControl::None;
+            display.update_transport_controls(s_audio.state() == AudioState::Playing, highlighted);
+            last_rendered_highlight = highlighted;
+            last_rendered_playing = (s_audio.state() == AudioState::Playing);
+        }
+
+        if (tick_5s >= 5000) {
+            tick_5s = 0;
+            ESP_LOGI(TAG, "Heartbeat: alive");
+            SystemStatus st = monitor.collect();
+            st.pcm_water_level = s_audio.pcm_water_level();
+            monitor.print_status(st);
+            display.update_status_bar(st.battery_percent,
+                                      st.is_charging,
+                                      st.sram_free,
+                                      st.psram_free,
+                                      st.pcm_water_level);
         }
     }
 }
