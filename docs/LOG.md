@@ -58,6 +58,47 @@
 - 代码层面已经不是“占位 GIF”，而是真正接上了 `ui_160x160.gif` 的预处理帧播放链路
 - 但这一步我还没有补跑一轮 `idf.py monitor` 去确认串口里 `GIF` 周期日志和长期稳定性
 - 改动文件：`components/gif_player/GifPlayer.hpp`、`components/gif_player/GifPlayer.cpp`、`components/display_manager/DisplayManager.hpp`、`components/display_manager/DisplayManager.cpp`、`main/main.cpp`
+- 提交号：`3263e7a`
+
+---
+
+## 2026-06-04 — Phase 5 GIF 色彩修正 + 粉色主题收敛
+
+- 按用户提供的 `实拍图/` 实拍照片继续收敛显示问题，目标不是继续堆功能，而是先修“颜色不对、UI 不清楚、整机观感不统一”
+- 这一步先对比了三组输入：
+- `assets/processed/ui_160x160.gif` 的源图
+- `/sdcard/pet/frames/frame_000.raw` 的预处理首帧
+- 板上实拍图
+- 定位结果非常明确：
+- 源 GIF 颜色正常
+- `raw` 帧读取后直接按本机 `uint16_t RGB565` 解释会偏色
+- 用脚本抽查像素发现：
+- 同一位置在源 GIF 中是深棕色
+- 在 raw565 直接解读后却变成偏绿色
+- 将该像素做字节交换后恢复到接近源图颜色
+- 结论：`assets/processed/frames/*.raw` 在磁盘上是 big-endian RGB565 字节序，运行时必须先 swap bytes
+- `GifPlayer` 改动：
+- `decode_next_frame()` 在 `fread()` 后对整帧做一次 `RGB565` 字节交换
+- 这样后续显示链路读到的是本机可直接使用的 native `uint16_t`
+- `DisplayManager` 改动：
+- 整套 UI 色板从橙蓝调改为粉色系，统一成深莓色背景 + 粉色高亮 + 浅粉文本
+- GIF 区域底板改成浅粉白色舞台，减少中间动画区发灰发脏的观感
+- 标题放大为 `2x`，底部传统播放器图标放大为 `3x`
+- 状态栏中部/右侧信息从 dim text 提升到 main text，提高实拍可读性
+- 歌曲第二行文本也从 dim 改为 main，减少“看不清标题”的问题
+- 实机验证：
+- `idf.py build` 通过
+- 已重新烧录到 `/dev/ttyACM0`
+- 用 PTY 跑了一轮 `idf.py -p /dev/ttyACM0 monitor`
+- 串口确认：
+- `GIF: [INF] Preprocessed pet frames ready from /sdcard/pet/frames`
+- `AUDIO: [INF] Test tone done: 32000 frames, 63 chunks`
+- `AUDIO: Streaming frame 100 ... PCM water=49%`
+- 这说明本轮显示修正没有打坏 SD/GIF/音频主链路
+- 当前仍需继续现场确认的点：
+- GIF 色彩虽然已从字节序层面修正，但仍需看你手里的实拍是否已经回到“接近源图”的状态
+- 整机屏幕稳定性还需要在真实触摸和长时间播放下继续观察
+- 改动文件：`components/gif_player/GifPlayer.cpp`、`components/display_manager/DisplayManager.cpp`
 - 提交号：待提交
 
 ---

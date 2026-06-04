@@ -6,7 +6,7 @@
 
 ## 当前版本：0.1.0
 
-## 当前 Phase：Phase 3 — 音频保活下的显示骨架落地
+## 当前 Phase：Phase 5 — GIF 实装后的显示收敛
 
 ## 已完成
 
@@ -45,20 +45,24 @@
 - [x] `display_manager` 已引入 FreeRTOS Mutex 保护 framebuffer 并发写
 - [x] UI 刷新节拍已分拆为：进度条 250ms、控件 500ms、状态栏 5s，减少触摸冲突
 - [x] `GifPlayer` 已接入 `/sdcard/pet/frames/*.raw` 预处理帧链路，主屏 GIF 区域已具备真实资源播放路径
+- [x] 已确认 `assets/processed/frames/*.raw` 需要运行时做 `RGB565` 字节交换，GIF 偏色根因已定位并修正到 `GifPlayer`
+- [x] 主 UI 已整体切换为粉色系主题，并提升了标题、状态栏和底部控件的对比度与字号
+- [x] 已结合 `实拍图/` 做一轮显示观感修正，并完成 `build + flash + monitor` 回归
 
 ## 下一步
-1. 跑一轮 `flash monitor`，确认真实 GIF 周期日志、触摸稳定性和音频不掉帧
-2. 将 `touch_manager`、`storage_manager`、`main` 统一收敛到 `config/board_config.h`
-3. 补 ButtonManager、更真实的 SystemMonitor 电池读取
-4. 开始按文档推进 App FSM / Queue 化重构
+1. 对照你手里的实拍继续收 GIF 实际色彩、整体清晰度和屏幕稳定性
+2. 将触摸命令从 UI 主循环直控改成入队消费，减少连按时的卡死风险
+3. 将 `touch_manager`、`storage_manager`、`main` 统一收敛到 `config/board_config.h`
+4. 补 ButtonManager、更真实的 SystemMonitor 电池读取
 
 ## 遗留问题
 
 - [ ] 板载喇叭是否已经真实出声仍需现场听感确认；当前只能从串口确认 PCM/I2S/Codec 链路在跑
 - [ ] `button_manager` 仍是占位实现
-- [ ] 真实 `ui.gif` 已接入预处理帧链路，但仍需串口/实机长时验证刷新稳定性
+- [ ] 真实 `ui.gif` 已接入预处理帧链路，但仍需继续实机长时验证刷新稳定性和颜色观感
 - [ ] `system_monitor` 目前电池数据仍为占位值，未接入 AXP2101
 - [ ] 触摸控制器当前能响应初始化，但 `FT3168 Device ID` 读回 `0x00`，仍需核实是否为兼容变体或寄存器读取差异
+- [ ] 触摸控制当前仍是 UI 线程直控音频，快速连按时稳定性还不够
 - [ ] 整体控制流仍未完成文档中的 App FSM / Queue 架构
 
 ## 文档列表（10 份）

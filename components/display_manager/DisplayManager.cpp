@@ -52,16 +52,17 @@ constexpr uint32_t rgb(uint8_t r, uint8_t g, uint8_t b)
            static_cast<uint32_t>(b);
 }
 
-constexpr uint32_t kBgColor = rgb(9, 18, 34);
-constexpr uint32_t kPanelColor = rgb(16, 31, 52);
-constexpr uint32_t kPanelBorder = rgb(74, 153, 184);
-constexpr uint32_t kAccentColor = rgb(242, 171, 50);
-constexpr uint32_t kAccentSoft = rgb(72, 122, 142);
-constexpr uint32_t kTextMain = rgb(238, 244, 247);
-constexpr uint32_t kTextDim = rgb(150, 171, 182);
-constexpr uint32_t kGoodColor = rgb(77, 202, 131);
-constexpr uint32_t kWarnColor = rgb(230, 128, 72);
-constexpr uint32_t kTrackColor = rgb(28, 50, 78);
+constexpr uint32_t kBgColor = rgb(27, 9, 29);
+constexpr uint32_t kPanelColor = rgb(51, 21, 48);
+constexpr uint32_t kPanelBorder = rgb(255, 154, 206);
+constexpr uint32_t kAccentColor = rgb(255, 108, 176);
+constexpr uint32_t kAccentSoft = rgb(121, 61, 111);
+constexpr uint32_t kTextMain = rgb(255, 246, 251);
+constexpr uint32_t kTextDim = rgb(232, 194, 216);
+constexpr uint32_t kGoodColor = rgb(255, 137, 196);
+constexpr uint32_t kWarnColor = rgb(255, 204, 144);
+constexpr uint32_t kTrackColor = rgb(88, 42, 79);
+constexpr uint32_t kGifStageColor = rgb(255, 244, 249);
 
 static const sh8601_lcd_init_cmd_t kLcdInitCmds[] = {
     {0x11, (uint8_t[]){0x00}, 0, 120},
@@ -241,14 +242,15 @@ void DisplayManager::render_static_ui()
     fill_rect_mem(kGifBoxX, kGifBoxY, kGifBoxSize, kGifBoxSize, kPanelColor);
     draw_rect_outline(kGifBoxX, kGifBoxY, kGifBoxSize, kGifBoxSize, kPanelBorder, 2);
     draw_rect_outline(kGifBoxX + 12, kGifBoxY + 12, kGifBoxSize - 24, kGifBoxSize - 24, kAccentSoft, 1);
-    draw_text(kGifBoxX + 52, kGifBoxY + 48, "GIF", kTextMain, kPanelColor, 3);
-    draw_text(kGifBoxX + 22, kGifBoxY + 102, "ANIMATION READY", kTextDim, kPanelColor, 1);
+    fill_rect_mem(kGifBoxX + 8, kGifBoxY + 8, kGifBoxSize - 16, kGifBoxSize - 16, kGifStageColor);
+    draw_text(kGifBoxX + 40, kGifBoxY + 48, "PET UI", kAccentColor, kGifStageColor, 2);
+    draw_text(kGifBoxX + 28, kGifBoxY + 102, "GIF FROM SD", kTextDim, kGifStageColor, 1);
 
     fill_rect_mem(kSongPanelX, kSongPanelY, kSongPanelW, kSongPanelH, kPanelColor);
     draw_rect_outline(kSongPanelX, kSongPanelY, kSongPanelW, kSongPanelH, kPanelBorder, 2);
 
-    draw_text(20, 40, "ESP32 MP3 PLAYER", kAccentColor, kBgColor, 1);
-    draw_text(20, 54, "AUDIO FIRST / UI THROTTLED", kTextDim, kBgColor, 1);
+    draw_text(20, 38, "ESP32 MP3 PLAYER", kAccentColor, kBgColor, 2);
+    draw_text(20, 58, "PINK UI / GIF FROM SD", kTextDim, kBgColor, 1);
 
     draw_progress_bar(kProgressX, kProgressY, kProgressW, kProgressH, 0.0f, kGoodColor, kTrackColor);
     draw_text(kProgressX, kProgressY - 18, "TRACK PROGRESS", kTextDim, kBgColor, 1);
@@ -282,12 +284,12 @@ void DisplayManager::update_status_bar(uint8_t battery_percent,
     char middle[32];
     std::snprintf(middle, sizeof(middle), "SRAM %3uKB",
                   static_cast<unsigned>(sram_free_bytes / 1024));
-    draw_text(126, 11, middle, kTextDim, kPanelColor, 1);
+    draw_text(126, 11, middle, kTextMain, kPanelColor, 1);
 
     char right[40];
     std::snprintf(right, sizeof(right), "PSRAM %4uKB",
                   static_cast<unsigned>(psram_free_bytes / 1024));
-    draw_text(236, 11, right, kTextDim, kPanelColor, 1);
+    draw_text(236, 11, right, kTextMain, kPanelColor, 1);
 
     char water[16];
     const int water_percent = static_cast<int>(std::max(0.0f, std::min(100.0f, pcm_water_level * 100.0f)));
@@ -336,7 +338,7 @@ void DisplayManager::update_playback_meter(float ratio, bool is_playing)
     const float clamped = std::max(0.0f, std::min(1.0f, ratio));
     fill_rect_mem(0, kProgressY - 22, BOARD_LCD_H_RES, 38, kBgColor);
 
-    draw_text(kProgressX, kProgressY - 18, "TRACK PROGRESS", kTextDim, kBgColor, 1);
+    draw_text(kProgressX, kProgressY - 18, "TRACK PROGRESS", kTextMain, kBgColor, 1);
     char water[20];
     std::snprintf(water, sizeof(water), "%3u%%",
                   static_cast<unsigned>(clamped * 100.0f));
@@ -433,7 +435,7 @@ void DisplayManager::render_gif_frame_rgb565(const uint16_t* frame, uint16_t wid
     const int start_x = kGifBoxX + ((kGifBoxSize - draw_w) / 2);
     const int start_y = kGifBoxY + ((kGifBoxSize - draw_h) / 2);
 
-    fill_rect_mem(kGifBoxX + 2, kGifBoxY + 2, kGifBoxSize - 4, kGifBoxSize - 4, kPanelColor);
+    fill_rect_mem(kGifBoxX + 2, kGifBoxY + 2, kGifBoxSize - 4, kGifBoxSize - 4, kGifStageColor);
     for (uint16_t y = 0; y < draw_h; ++y) {
         for (uint16_t x = 0; x < draw_w; ++x) {
             const uint16_t px = frame[(y * width) + x];
@@ -566,7 +568,7 @@ void DisplayManager::draw_title_block(const char* title)
 
     draw_text(kSongPanelX + 14, kSongPanelY + 32, line1, kTextMain, kPanelColor, 2);
     if (line2[0] != '\0') {
-        draw_text(kSongPanelX + 14, kSongPanelY + 50, line2, kTextDim, kPanelColor, 1);
+        draw_text(kSongPanelX + 14, kSongPanelY + 50, line2, kTextMain, kPanelColor, 1);
     }
 }
 
@@ -595,21 +597,21 @@ void DisplayManager::draw_transport_buttons(bool is_playing, UiControl highlight
                 kButtonH,
                 "|<<",
                 highlighted == UiControl::Prev,
-                2);
+                3);
     draw_button(start_x + kButtonW + kButtonGap,
                 kControlsY,
                 kButtonW,
                 kButtonH,
                 is_playing ? "||" : ">|",
                 highlighted == UiControl::PlayPause,
-                2);
+                3);
     draw_button(start_x + (kButtonW + kButtonGap) * 2,
                 kControlsY,
                 kButtonW,
                 kButtonH,
                 ">>|",
                 highlighted == UiControl::Next,
-                2);
+                3);
 }
 
 void DisplayManager::draw_progress_bar(int x, int y, int w, int h, float ratio, uint32_t fill, uint32_t track)

@@ -12,6 +12,11 @@ static constexpr size_t kFrameBytes = kFramePixels * sizeof(uint16_t);
 
 namespace {
 uint16_t* s_frame_cache = nullptr;
+
+constexpr uint16_t swap_rgb565_bytes(uint16_t value)
+{
+    return static_cast<uint16_t>((value << 8) | (value >> 8));
+}
 }
 
 bool GifPlayer::init()
@@ -74,6 +79,12 @@ int GifPlayer::decode_next_frame(uint16_t* frame_buffer, size_t buffer_size,
     if (n != kFrameBytes) {
         ESP_LOGE(TAG, "[ERR] Read frame short: %s bytes=%u", path, static_cast<unsigned>(n));
         return 0;
+    }
+
+    // Preprocessed raw frames are stored as big-endian RGB565 bytes on disk.
+    // Normalize once here so the display pipeline reads native RGB565 values.
+    for (size_t i = 0; i < kFramePixels; ++i) {
+        s_frame_cache[i] = swap_rgb565_bytes(s_frame_cache[i]);
     }
 
     std::memcpy(frame_buffer, s_frame_cache, kFrameBytes);
