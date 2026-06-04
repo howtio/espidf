@@ -31,6 +31,7 @@ public:
     UiControl hit_test_control(uint16_t x, uint16_t y) const;
     void animate_gif_placeholder(uint32_t tick);
     void render_gif_frame_rgb565(const uint16_t* frame, uint16_t width, uint16_t height);
+    void refresh_full_frame();
     uint16_t screen_width() const { return 368; }
     uint16_t screen_height() const { return 448; }
     esp_lcd_panel_handle_t panel_handle() const { return panel_; }
@@ -44,9 +45,10 @@ private:
     void draw_char(int x, int y, char c, uint32_t fg, uint32_t bg, uint8_t scale = 1);
     void draw_text(int x, int y, const char* text, uint32_t fg, uint32_t bg, uint8_t scale = 1);
     void draw_title_block(const char* title);
-    void draw_button(int x, int y, int w, int h, const char* label, bool active, uint8_t scale = 1);
+    void draw_button(int x, int y, int w, int h, bool active);
     void draw_transport_buttons(bool is_playing, UiControl highlighted);
     void draw_progress_bar(int x, int y, int w, int h, float ratio, uint32_t fill, uint32_t track);
+    void draw_transport_icon(UiControl control, bool is_playing, int x, int y, int w, int h, uint32_t color);
     bool control_bounds(UiControl control, int& x, int& y, int& w, int& h) const;
     static uint8_t glyph_row(char c, int row);
 

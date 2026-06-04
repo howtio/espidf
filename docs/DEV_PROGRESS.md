@@ -45,6 +45,11 @@
 - [x] `display_manager` 已引入 FreeRTOS Mutex 保护 framebuffer 并发写
 - [x] UI 刷新节拍已分拆为：进度条 250ms、控件 500ms、状态栏 5s，减少触摸冲突
 - [x] `GifPlayer` 已接入 `/sdcard/pet/frames/*.raw` 预处理帧链路，主屏 GIF 区域已具备真实资源播放路径
+- [x] GIF 运行时缓存策略已从整包预载改成 `5` 帧 PSRAM 窗口缓存，避免启动期大块预载和 watchdog 风险
+- [x] GIF 运行时路径已稳定为 `Flash assets SPIFFS -> PSRAM 5帧窗口 -> framebuffer -> LCD`
+- [x] UI 已去掉重复静态文案，当前只保留单一标题，不再叠 `PET UI / GIF FROM FLASH / PINK UI ...`
+- [x] 歌曲区、进度区、控制区已改成整块清屏后重绘，并增加 `1.5s` 低频整屏复刷以压掉残影
+- [x] 已完成 `build + flash + monitor` 回归，串口确认 `GIF window primed: 5 frames`，音频播放和 `Heartbeat` 仍正常
 - [x] 已确认 `assets/processed/frames/*.raw` 需要运行时做 `RGB565` 字节交换，GIF 偏色根因已定位并修正到 `GifPlayer`
 - [x] 主 UI 已整体切换为粉色系主题，并提升了标题、状态栏和底部控件的对比度与字号
 - [x] 已结合 `实拍图/` 做一轮显示观感修正，并完成 `build + flash + monitor` 回归
@@ -53,7 +58,7 @@
 - [x] SH8601 局刷已加入偶数边界对齐，底部按钮热区已从大带状收回到真实按钮框
 
 ## 下一步
-1. 对照你手里的实拍继续收 GIF 实际色彩和文字清晰度，看 `RGB` 面板色序是否已经完全对
+1. 继续对照 `实拍图/` 收 GIF 区、歌曲区和按钮区的脏块与清晰度，必要时进一步收窄局刷区域或改为组件级全重绘
 2. 将触摸命令从 UI 主循环直控改成入队消费，减少连按时的卡死风险
 3. 将 `touch_manager`、`storage_manager`、`main` 统一收敛到 `config/board_config.h`
 4. 补 ButtonManager、更真实的 SystemMonitor 电池读取
@@ -63,6 +68,7 @@
 - [ ] 板载喇叭是否已经真实出声仍需现场听感确认；当前只能从串口确认 PCM/I2S/Codec 链路在跑
 - [ ] `button_manager` 仍是占位实现
 - [ ] 真实 `ui.gif` 已接入 flash 预处理帧链路，但仍需继续实机长时验证刷新稳定性和颜色观感
+- [ ] UI 观感虽已去掉双层文案并增加整屏复刷，但仍需继续根据最新实拍图收细节脏块和文字清晰度
 - [ ] `system_monitor` 目前电池数据仍为占位值，未接入 AXP2101
 - [ ] 触摸控制器当前能响应初始化，但 `FT3168 Device ID` 读回 `0x00`，仍需核实是否为兼容变体或寄存器读取差异
 - [ ] 触摸控制当前仍是 UI 线程直控音频，快速连按时稳定性还不够

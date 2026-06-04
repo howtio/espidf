@@ -331,6 +331,7 @@ extern "C" void app_main(void)
     uint32_t touch_release_samples = 0;
     uint32_t tick_250ms = 0;
     uint32_t tick_500ms = 0;
+    uint32_t tick_1500ms = 0;
     uint32_t tick_5s = 0;
     UiControl last_rendered_highlight = UiControl::None;
     bool last_rendered_playing = false;
@@ -338,6 +339,7 @@ extern "C" void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(20));
         tick_250ms += 20;
         tick_500ms += 20;
+        tick_1500ms += 20;
         tick_5s += 20;
 
         if (tick_250ms >= 250) {
@@ -366,6 +368,11 @@ extern "C" void app_main(void)
                 last_rendered_playing = is_playing;
                 last_rendered_highlight = highlighted;
             }
+        }
+
+        if (tick_1500ms >= 1500) {
+            tick_1500ms = 0;
+            display.refresh_full_frame();
         }
 
         if (touch.read_touch(tp)) {

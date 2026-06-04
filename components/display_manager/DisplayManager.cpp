@@ -20,23 +20,25 @@ constexpr spi_host_device_t kLcdHost = SPI2_HOST;
 constexpr i2c_port_t kI2cHost = I2C_NUM_0;
 constexpr uint8_t kIoExpRegOutput = 0x01;
 constexpr uint8_t kIoExpRegConfig = 0x03;
-constexpr uint16_t kChunkRows = 8;
+constexpr uint16_t kChunkRows = 16;
 constexpr uint32_t kBytesPerPixel = 3;
 constexpr uint32_t kLcdBitsPerPixel = 24;
 constexpr int kStatusBarY = 0;
 constexpr int kStatusBarH = 32;
 constexpr int kGifBoxX = 104;
-constexpr int kGifBoxY = 56;
+constexpr int kGifBoxY = 74;
 constexpr int kGifBoxSize = 160;
+constexpr int kHeaderX = 22;
+constexpr int kHeaderY = 46;
 constexpr int kSongPanelX = 20;
-constexpr int kSongPanelY = 242;
+constexpr int kSongPanelY = 254;
 constexpr int kSongPanelW = 328;
 constexpr int kSongPanelH = 74;
 constexpr int kProgressX = 28;
-constexpr int kProgressY = 332;
+constexpr int kProgressY = 352;
 constexpr int kProgressW = 312;
 constexpr int kProgressH = 16;
-constexpr int kControlsY = 372;
+constexpr int kControlsY = 394;
 constexpr int kButtonW = 86;
 constexpr int kButtonH = 44;
 constexpr int kButtonGap = 10;
@@ -235,22 +237,18 @@ void DisplayManager::render_static_ui()
     }
 
     ESP_LOGI("LCD", "[INF] Render static UI scaffold");
-    clear_screen(kBgColor);
-
     fill_rect_mem(0, 0, BOARD_LCD_H_RES, BOARD_LCD_V_RES, kBgColor);
     fill_rect_mem(0, kStatusBarY, BOARD_LCD_H_RES, kStatusBarH, kPanelColor);
+    draw_text(kHeaderX, kHeaderY, "ESP32 MP3 PLAYER", kAccentColor, kBgColor, 1);
+    fill_rect_mem(kHeaderX, kHeaderY + 14, 154, 2, kAccentSoft);
+
     fill_rect_mem(kGifBoxX, kGifBoxY, kGifBoxSize, kGifBoxSize, kPanelColor);
     draw_rect_outline(kGifBoxX, kGifBoxY, kGifBoxSize, kGifBoxSize, kPanelBorder, 2);
     draw_rect_outline(kGifBoxX + 12, kGifBoxY + 12, kGifBoxSize - 24, kGifBoxSize - 24, kAccentSoft, 1);
     fill_rect_mem(kGifBoxX + 8, kGifBoxY + 8, kGifBoxSize - 16, kGifBoxSize - 16, kGifStageColor);
-    draw_text(kGifBoxX + 40, kGifBoxY + 48, "PET UI", kAccentColor, kGifStageColor, 2);
-    draw_text(kGifBoxX + 28, kGifBoxY + 102, "GIF FROM SD", kTextDim, kGifStageColor, 1);
 
     fill_rect_mem(kSongPanelX, kSongPanelY, kSongPanelW, kSongPanelH, kPanelColor);
     draw_rect_outline(kSongPanelX, kSongPanelY, kSongPanelW, kSongPanelH, kPanelBorder, 2);
-
-    draw_text(20, 40, "ESP32 MP3 PLAYER", kAccentColor, kBgColor, 2);
-    draw_text(20, 60, "PINK UI / GIF FROM FLASH", kTextDim, kBgColor, 1);
 
     draw_progress_bar(kProgressX, kProgressY, kProgressW, kProgressH, 0.0f, kGoodColor, kTrackColor);
     draw_text(kProgressX, kProgressY - 18, "TRACK PROGRESS", kTextDim, kBgColor, 1);
@@ -310,7 +308,8 @@ void DisplayManager::update_now_playing(const char* title, size_t index, size_t 
     if (ui_mutex_ && xSemaphoreTake(ui_mutex_, pdMS_TO_TICKS(20)) != pdTRUE) {
         return;
     }
-    fill_rect_mem(kSongPanelX + 2, kSongPanelY + 2, kSongPanelW - 4, kSongPanelH - 4, kPanelColor);
+    fill_rect_mem(kSongPanelX, kSongPanelY, kSongPanelW, kSongPanelH, kPanelColor);
+    draw_rect_outline(kSongPanelX, kSongPanelY, kSongPanelW, kSongPanelH, kPanelBorder, 2);
 
     char header[32];
     if (total == 0) {
@@ -336,7 +335,7 @@ void DisplayManager::update_playback_meter(float ratio, bool is_playing)
         return;
     }
     const float clamped = std::max(0.0f, std::min(1.0f, ratio));
-    fill_rect_mem(0, kProgressY - 22, BOARD_LCD_H_RES, 38, kBgColor);
+    fill_rect_mem(0, kProgressY - 24, BOARD_LCD_H_RES, 42, kBgColor);
 
     draw_text(kProgressX, kProgressY - 18, "TRACK PROGRESS", kTextMain, kBgColor, 1);
     char water[20];
@@ -344,7 +343,7 @@ void DisplayManager::update_playback_meter(float ratio, bool is_playing)
                   static_cast<unsigned>(clamped * 100.0f));
     draw_text(kProgressX + kProgressW - 54, kProgressY - 18, water, kTextMain, kBgColor, 1);
     draw_progress_bar(kProgressX, kProgressY, kProgressW, kProgressH, clamped, kGoodColor, kTrackColor);
-    present_area(0, kProgressY - 22, BOARD_LCD_H_RES, 38);
+    present_area(0, kProgressY - 24, BOARD_LCD_H_RES, 42);
     if (ui_mutex_) {
         xSemaphoreGive(ui_mutex_);
     }
@@ -355,9 +354,9 @@ void DisplayManager::update_transport_controls(bool is_playing, UiControl highli
     if (ui_mutex_ && xSemaphoreTake(ui_mutex_, pdMS_TO_TICKS(20)) != pdTRUE) {
         return;
     }
-    fill_rect_mem(0, kControlsY, BOARD_LCD_H_RES, kButtonH + 4, kBgColor);
+    fill_rect_mem(0, kControlsY - 4, BOARD_LCD_H_RES, kButtonH + 12, kBgColor);
     draw_transport_buttons(is_playing, highlighted);
-    present_area(0, kControlsY, BOARD_LCD_H_RES, kButtonH + 4);
+    present_area(0, kControlsY - 4, BOARD_LCD_H_RES, kButtonH + 12);
     if (ui_mutex_) {
         xSemaphoreGive(ui_mutex_);
     }
@@ -436,16 +435,34 @@ void DisplayManager::render_gif_frame_rgb565(const uint16_t* frame, uint16_t wid
 
     fill_rect_mem(kGifBoxX + 2, kGifBoxY + 2, kGifBoxSize - 4, kGifBoxSize - 4, kGifStageColor);
     for (uint16_t y = 0; y < draw_h; ++y) {
+        uint8_t* dst = framebuffer_ + (((start_y + y) * BOARD_LCD_H_RES) + start_x) * kBytesPerPixel;
         for (uint16_t x = 0; x < draw_w; ++x) {
             const uint16_t px = frame[(y * width) + x];
             const uint8_t r = static_cast<uint8_t>(((px >> 11) & 0x1F) * 255 / 31);
             const uint8_t g = static_cast<uint8_t>(((px >> 5) & 0x3F) * 255 / 63);
             const uint8_t b = static_cast<uint8_t>((px & 0x1F) * 255 / 31);
-            fill_rect_mem(start_x + x, start_y + y, 1, 1, rgb(r, g, b));
+            dst[0] = r;
+            dst[1] = g;
+            dst[2] = b;
+            dst += kBytesPerPixel;
         }
     }
     draw_rect_outline(kGifBoxX, kGifBoxY, kGifBoxSize, kGifBoxSize, kPanelBorder, 2);
     present_area(kGifBoxX, kGifBoxY, kGifBoxSize, kGifBoxSize);
+    if (ui_mutex_) {
+        xSemaphoreGive(ui_mutex_);
+    }
+}
+
+void DisplayManager::refresh_full_frame()
+{
+    if (!framebuffer_) {
+        return;
+    }
+    if (ui_mutex_ && xSemaphoreTake(ui_mutex_, pdMS_TO_TICKS(30)) != pdTRUE) {
+        return;
+    }
+    present_area(0, 0, BOARD_LCD_H_RES, BOARD_LCD_V_RES);
     if (ui_mutex_) {
         xSemaphoreGive(ui_mutex_);
     }
@@ -545,12 +562,17 @@ void DisplayManager::draw_text(int x, int y, const char* text, uint32_t fg, uint
 
 void DisplayManager::draw_title_block(const char* title)
 {
-    const int line_width_chars = 25;
+    const int line_width_chars = 22;
     char normalized[64];
     std::memset(normalized, 0, sizeof(normalized));
 
+    size_t title_len = std::strlen(title);
+    if (title_len > 4 && std::strcmp(title + title_len - 4, ".mp3") == 0) {
+        title_len -= 4;
+    }
+
     size_t out = 0;
-    for (size_t i = 0; title[i] != '\0' && out < sizeof(normalized) - 1; ++i) {
+    for (size_t i = 0; i < title_len && out < sizeof(normalized) - 1; ++i) {
         char c = title[i];
         if (std::islower(static_cast<unsigned char>(c))) {
             c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
@@ -571,25 +593,18 @@ void DisplayManager::draw_title_block(const char* title)
         std::snprintf(line2, sizeof(line2), "%.*s", line_width_chars, normalized + line_width_chars);
     }
 
-    draw_text(kSongPanelX + 14, kSongPanelY + 32, line1, kTextMain, kPanelColor, 2);
+    draw_text(kSongPanelX + 14, kSongPanelY + 30, line1, kTextMain, kPanelColor, 2);
     if (line2[0] != '\0') {
-        draw_text(kSongPanelX + 14, kSongPanelY + 50, line2, kTextMain, kPanelColor, 1);
+        draw_text(kSongPanelX + 14, kSongPanelY + 54, line2, kTextDim, kPanelColor, 1);
     }
 }
 
-void DisplayManager::draw_button(int x, int y, int w, int h, const char* label, bool active, uint8_t scale)
+void DisplayManager::draw_button(int x, int y, int w, int h, bool active)
 {
     const uint32_t fill = active ? kAccentColor : kPanelColor;
     const uint32_t border = active ? kAccentColor : kPanelBorder;
-    const uint32_t text = active ? kBgColor : kTextMain;
     fill_rect_mem(x, y, w, h, fill);
     draw_rect_outline(x, y, w, h, border, 2);
-    const int label_len = static_cast<int>(std::strlen(label));
-    const int text_w = label_len * 6 * scale;
-    const int text_h = 7 * scale;
-    const int text_x = x + std::max(8, (w - text_w) / 2);
-    const int text_y = y + std::max(6, (h - text_h) / 2);
-    draw_text(text_x, text_y, label, text, fill, scale);
 }
 
 void DisplayManager::draw_transport_buttons(bool is_playing, UiControl highlighted)
@@ -599,29 +614,14 @@ void DisplayManager::draw_transport_buttons(bool is_playing, UiControl highlight
     int w = 0;
     int h = 0;
     control_bounds(UiControl::Prev, x, y, w, h);
-    draw_button(x,
-                y,
-                w,
-                h,
-                "|<<",
-                highlighted == UiControl::Prev,
-                3);
+    draw_button(x, y, w, h, highlighted == UiControl::Prev);
+    draw_transport_icon(UiControl::Prev, is_playing, x, y, w, h, highlighted == UiControl::Prev ? kBgColor : kTextMain);
     control_bounds(UiControl::PlayPause, x, y, w, h);
-    draw_button(x,
-                y,
-                w,
-                h,
-                is_playing ? "||" : ">|",
-                highlighted == UiControl::PlayPause,
-                3);
+    draw_button(x, y, w, h, highlighted == UiControl::PlayPause);
+    draw_transport_icon(UiControl::PlayPause, is_playing, x, y, w, h, highlighted == UiControl::PlayPause ? kBgColor : kTextMain);
     control_bounds(UiControl::Next, x, y, w, h);
-    draw_button(x,
-                y,
-                w,
-                h,
-                ">>|",
-                highlighted == UiControl::Next,
-                3);
+    draw_button(x, y, w, h, highlighted == UiControl::Next);
+    draw_transport_icon(UiControl::Next, is_playing, x, y, w, h, highlighted == UiControl::Next ? kBgColor : kTextMain);
 }
 
 void DisplayManager::draw_progress_bar(int x, int y, int w, int h, float ratio, uint32_t fill, uint32_t track)
@@ -655,6 +655,46 @@ bool DisplayManager::control_bounds(UiControl control, int& x, int& y, int& w, i
         case UiControl::None:
         default:
             return false;
+    }
+}
+
+void DisplayManager::draw_transport_icon(UiControl control, bool is_playing, int x, int y, int w, int h, uint32_t color)
+{
+    const int mid_y = y + (h / 2);
+    const int tri_h = 16;
+    const int bar_w = 5;
+
+    auto draw_left_triangle = [&](int cx) {
+        for (int row = 0; row < tri_h; ++row) {
+            const int half = tri_h / 2;
+            const int span = row <= half ? row : (tri_h - 1 - row);
+            fill_rect_mem(cx - span, mid_y - half + row, span + 1, 1, color);
+        }
+    };
+    auto draw_right_triangle = [&](int cx) {
+        for (int row = 0; row < tri_h; ++row) {
+            const int half = tri_h / 2;
+            const int span = row <= half ? row : (tri_h - 1 - row);
+            fill_rect_mem(cx, mid_y - half + row, span + 1, 1, color);
+        }
+    };
+
+    if (control == UiControl::Prev) {
+        fill_rect_mem(x + 18, mid_y - 10, bar_w, 20, color);
+        draw_left_triangle(x + 44);
+        draw_left_triangle(x + 56);
+    } else if (control == UiControl::PlayPause) {
+        if (is_playing) {
+            fill_rect_mem(x + 31, mid_y - 10, 6, 20, color);
+            fill_rect_mem(x + 49, mid_y - 10, 6, 20, color);
+        } else {
+            fill_rect_mem(x + 28, mid_y - 10, bar_w, 20, color);
+            draw_right_triangle(x + 42);
+        }
+    } else if (control == UiControl::Next) {
+        draw_right_triangle(x + 28);
+        draw_right_triangle(x + 40);
+        fill_rect_mem(x + 63, mid_y - 10, bar_w, 20, color);
     }
 }
 

@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -20,6 +21,8 @@ public:
 
 private:
     std::string frame_dir_;
+    uint16_t* frame_store_ = nullptr;
+    std::array<size_t, 5> frame_slots_ {};
     size_t frame_count_ = 0;
     size_t current_frame_ = 0;
     GifLevel level_ = GifLevel::Full;

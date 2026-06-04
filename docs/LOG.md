@@ -4,6 +4,37 @@
 
 ---
 
+## 2026-06-04 — Phase 5 GIF 5帧窗口缓存 + UI 单层重绘
+
+- 按施工文档继续收 `GIF` 与 `UI` 稳定性，收掉之前 “71 帧整包预载 + 多层静态标签 + 局刷残影” 的组合问题
+- `GifPlayer` 不再整包预载全部 71 帧，改为 `5` 帧窗口缓存：
+- 运行时从 Flash `assets` SPIFFS 的 `/assets/pet/frames` 按需读帧
+- PSRAM 只保留 `5 * 160 * 160 * 2 = 256000 bytes` 的窗口缓存
+- 串口已确认：
+- `GIF: [INF] Prime GIF window: dir=/assets/pet/frames total=71 window=5 bytes=256000`
+- `GIF: [INF] GIF window primed: 5 frames`
+- 启动期未再出现之前整包预载触发的 watchdog 风险
+- `DisplayManager` 收掉重复文案和“像两套 UI 叠一起”的静态标签：
+- 删除 GIF 区域里的 `PET UI / GIF FROM FLASH`
+- 删除标题下的副标题 `PINK UI / GIF FROM FLASH`
+- 顶部只保留单一 `ESP32 MP3 PLAYER` 标题
+- 动态区刷新方式改成“整块清屏后重绘”：
+- 歌曲信息区每次整块填充并重画边框
+- 进度区扩大清理范围
+- 控制区扩大清理范围
+- 新增 `refresh_full_frame()`，主循环每 `1.5s` 做一次低频整屏复刷，专门压掉残影和脏块
+- 歌名展示同步做了降噪：
+- 去掉 `.mp3` 后缀
+- 每行字符数收短
+- 第二行改弱化色，降低挤压感
+- 编译/烧录/串口：
+- `idf.py build` 通过，bin 大小 `0x715e0`
+- 已重新烧录 `/dev/ttyACM0`
+- `monitor` 确认 `Assets SPIFFS mounted`、`GIF window primed: 5 frames`、`Streaming frame 400...`、`Heartbeat` 正常
+- 当前边界：
+- 这轮主要解决缓存策略和显示重绘策略，屏幕观感还要继续对照你更新的 `实拍图/` 微调
+- `实拍图/` 未加入 git
+
 ## 2026-06-04 — Phase 3 触摸精确化 + UI 线程安全 + 控件节拍精细调优
 
 - 在上一条触摸节拍化的基础上继续打磨“触摸命中不稳定”的问题
