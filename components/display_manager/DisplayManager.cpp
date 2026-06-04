@@ -28,20 +28,18 @@ constexpr int kStatusBarH = 32;
 constexpr int kGifBoxX = 104;
 constexpr int kGifBoxY = 74;
 constexpr int kGifBoxSize = 160;
-constexpr int kHeaderX = 22;
-constexpr int kHeaderY = 46;
 constexpr int kSongPanelX = 20;
 constexpr int kSongPanelY = 254;
 constexpr int kSongPanelW = 328;
-constexpr int kSongPanelH = 74;
+constexpr int kSongPanelH = 70;
 constexpr int kProgressX = 28;
-constexpr int kProgressY = 352;
+constexpr int kProgressY = 338;
 constexpr int kProgressW = 312;
-constexpr int kProgressH = 16;
-constexpr int kControlsY = 394;
-constexpr int kButtonW = 86;
-constexpr int kButtonH = 44;
-constexpr int kButtonGap = 10;
+constexpr int kProgressH = 18;
+constexpr int kControlsY = 374;
+constexpr int kButtonW = 90;
+constexpr int kButtonH = 52;
+constexpr int kButtonGap = 12;
 constexpr int kButtonTouchPadX = 12;
 constexpr int kButtonTouchPadY = 18;
 constexpr int kAnimInset = 18;
@@ -239,8 +237,6 @@ void DisplayManager::render_static_ui()
     ESP_LOGI("LCD", "[INF] Render static UI scaffold");
     fill_rect_mem(0, 0, BOARD_LCD_H_RES, BOARD_LCD_V_RES, kBgColor);
     fill_rect_mem(0, kStatusBarY, BOARD_LCD_H_RES, kStatusBarH, kPanelColor);
-    draw_text(kHeaderX, kHeaderY, "ESP32 MP3 PLAYER", kAccentColor, kBgColor, 1);
-    fill_rect_mem(kHeaderX, kHeaderY + 14, 154, 2, kAccentSoft);
 
     fill_rect_mem(kGifBoxX, kGifBoxY, kGifBoxSize, kGifBoxSize, kPanelColor);
     draw_rect_outline(kGifBoxX, kGifBoxY, kGifBoxSize, kGifBoxSize, kPanelBorder, 2);
@@ -251,7 +247,6 @@ void DisplayManager::render_static_ui()
     draw_rect_outline(kSongPanelX, kSongPanelY, kSongPanelW, kSongPanelH, kPanelBorder, 2);
 
     draw_progress_bar(kProgressX, kProgressY, kProgressW, kProgressH, 0.0f, kGoodColor, kTrackColor);
-    draw_text(kProgressX, kProgressY - 18, "TRACK PROGRESS", kTextDim, kBgColor, 1);
     draw_text(kProgressX + kProgressW - 54, kProgressY - 18, "0%", kTextDim, kBgColor, 1);
 
     draw_transport_buttons(false, UiControl::None);
@@ -273,26 +268,26 @@ void DisplayManager::update_status_bar(uint8_t battery_percent,
     }
     fill_rect_mem(0, kStatusBarY, BOARD_LCD_H_RES, kStatusBarH, kPanelColor);
 
-    char left[32];
-    std::snprintf(left, sizeof(left), "BAT %3u%% %s",
+    char left[16];
+    std::snprintf(left, sizeof(left), "B%3u%s",
                   static_cast<unsigned>(battery_percent),
-                  is_charging ? "CHG" : "DIS");
+                  is_charging ? "+" : "-");
     draw_text(12, 11, left, kTextMain, kPanelColor, 1);
 
-    char middle[32];
-    std::snprintf(middle, sizeof(middle), "SRAM %3uKB",
+    char middle[16];
+    std::snprintf(middle, sizeof(middle), "S%3u",
                   static_cast<unsigned>(sram_free_bytes / 1024));
-    draw_text(126, 11, middle, kTextMain, kPanelColor, 1);
+    draw_text(108, 11, middle, kTextMain, kPanelColor, 1);
 
-    char right[40];
-    std::snprintf(right, sizeof(right), "PSRAM %4uKB",
+    char right[16];
+    std::snprintf(right, sizeof(right), "P%4u",
                   static_cast<unsigned>(psram_free_bytes / 1024));
-    draw_text(236, 11, right, kTextMain, kPanelColor, 1);
+    draw_text(182, 11, right, kTextMain, kPanelColor, 1);
 
     char water[16];
     const int water_percent = static_cast<int>(std::max(0.0f, std::min(100.0f, pcm_water_level * 100.0f)));
-    std::snprintf(water, sizeof(water), "%2d%%", water_percent);
-    draw_text(318, 11, water, water_percent < 30 ? kWarnColor : kGoodColor, kPanelColor, 1);
+    std::snprintf(water, sizeof(water), "A%2d", water_percent);
+    draw_text(290, 11, water, water_percent < 30 ? kWarnColor : kGoodColor, kPanelColor, 1);
 
     present_area(0, kStatusBarY, BOARD_LCD_H_RES, kStatusBarH);
     ESP_LOGI("LCD", "[INF] Status bar updated: battery=%u%% pcm=%d%%",
@@ -311,15 +306,15 @@ void DisplayManager::update_now_playing(const char* title, size_t index, size_t 
     fill_rect_mem(kSongPanelX, kSongPanelY, kSongPanelW, kSongPanelH, kPanelColor);
     draw_rect_outline(kSongPanelX, kSongPanelY, kSongPanelW, kSongPanelH, kPanelBorder, 2);
 
-    char header[32];
+    char header[16];
     if (total == 0) {
-        std::snprintf(header, sizeof(header), "TRACK -- / --");
+        std::snprintf(header, sizeof(header), "--/--");
     } else {
-        std::snprintf(header, sizeof(header), "TRACK %02u / %02u",
+        std::snprintf(header, sizeof(header), "%02u/%02u",
                       static_cast<unsigned>(index + 1),
                       static_cast<unsigned>(total));
     }
-    draw_text(kSongPanelX + 14, kSongPanelY + 12, header, kAccentColor, kPanelColor, 1);
+    draw_text(kSongPanelX + kSongPanelW - 40, kSongPanelY + 10, header, kAccentColor, kPanelColor, 1);
     draw_title_block(title ? title : "NO TRACK");
     present_area(kSongPanelX, kSongPanelY, kSongPanelW, kSongPanelH);
     ESP_LOGI("LCD", "[INF] Now playing updated: %s", title ? title : "NO TRACK");
@@ -335,15 +330,14 @@ void DisplayManager::update_playback_meter(float ratio, bool is_playing)
         return;
     }
     const float clamped = std::max(0.0f, std::min(1.0f, ratio));
-    fill_rect_mem(0, kProgressY - 24, BOARD_LCD_H_RES, 42, kBgColor);
+    fill_rect_mem(0, kProgressY - 20, BOARD_LCD_H_RES, 44, kBgColor);
 
-    draw_text(kProgressX, kProgressY - 18, "TRACK PROGRESS", kTextMain, kBgColor, 1);
     char water[20];
     std::snprintf(water, sizeof(water), "%3u%%",
                   static_cast<unsigned>(clamped * 100.0f));
     draw_text(kProgressX + kProgressW - 54, kProgressY - 18, water, kTextMain, kBgColor, 1);
     draw_progress_bar(kProgressX, kProgressY, kProgressW, kProgressH, clamped, kGoodColor, kTrackColor);
-    present_area(0, kProgressY - 24, BOARD_LCD_H_RES, 42);
+    present_area(0, kProgressY - 20, BOARD_LCD_H_RES, 44);
     if (ui_mutex_) {
         xSemaphoreGive(ui_mutex_);
     }
@@ -562,7 +556,7 @@ void DisplayManager::draw_text(int x, int y, const char* text, uint32_t fg, uint
 
 void DisplayManager::draw_title_block(const char* title)
 {
-    const int line_width_chars = 22;
+    const int line_width_chars = 18;
     char normalized[64];
     std::memset(normalized, 0, sizeof(normalized));
 
@@ -593,9 +587,9 @@ void DisplayManager::draw_title_block(const char* title)
         std::snprintf(line2, sizeof(line2), "%.*s", line_width_chars, normalized + line_width_chars);
     }
 
-    draw_text(kSongPanelX + 14, kSongPanelY + 30, line1, kTextMain, kPanelColor, 2);
+    draw_text(kSongPanelX + 14, kSongPanelY + 18, line1, kTextMain, kPanelColor, 2);
     if (line2[0] != '\0') {
-        draw_text(kSongPanelX + 14, kSongPanelY + 54, line2, kTextDim, kPanelColor, 1);
+        draw_text(kSongPanelX + 14, kSongPanelY + 44, line2, kTextDim, kPanelColor, 1);
     }
 }
 
@@ -661,8 +655,8 @@ bool DisplayManager::control_bounds(UiControl control, int& x, int& y, int& w, i
 void DisplayManager::draw_transport_icon(UiControl control, bool is_playing, int x, int y, int w, int h, uint32_t color)
 {
     const int mid_y = y + (h / 2);
-    const int tri_h = 16;
-    const int bar_w = 5;
+    const int tri_h = 22;
+    const int bar_w = 7;
 
     auto draw_left_triangle = [&](int cx) {
         for (int row = 0; row < tri_h; ++row) {
@@ -680,21 +674,21 @@ void DisplayManager::draw_transport_icon(UiControl control, bool is_playing, int
     };
 
     if (control == UiControl::Prev) {
-        fill_rect_mem(x + 18, mid_y - 10, bar_w, 20, color);
-        draw_left_triangle(x + 44);
-        draw_left_triangle(x + 56);
+        fill_rect_mem(x + 18, mid_y - 12, bar_w, 24, color);
+        draw_left_triangle(x + 48);
+        draw_left_triangle(x + 62);
     } else if (control == UiControl::PlayPause) {
         if (is_playing) {
-            fill_rect_mem(x + 31, mid_y - 10, 6, 20, color);
-            fill_rect_mem(x + 49, mid_y - 10, 6, 20, color);
+            fill_rect_mem(x + 31, mid_y - 12, 8, 24, color);
+            fill_rect_mem(x + 51, mid_y - 12, 8, 24, color);
         } else {
-            fill_rect_mem(x + 28, mid_y - 10, bar_w, 20, color);
-            draw_right_triangle(x + 42);
+            fill_rect_mem(x + 28, mid_y - 12, bar_w, 24, color);
+            draw_right_triangle(x + 46);
         }
     } else if (control == UiControl::Next) {
-        draw_right_triangle(x + 28);
-        draw_right_triangle(x + 40);
-        fill_rect_mem(x + 63, mid_y - 10, bar_w, 20, color);
+        draw_right_triangle(x + 24);
+        draw_right_triangle(x + 38);
+        fill_rect_mem(x + 66, mid_y - 12, bar_w, 24, color);
     }
 }
 

@@ -45,6 +45,9 @@
 - [x] `display_manager` 已引入 FreeRTOS Mutex 保护 framebuffer 并发写
 - [x] UI 刷新节拍已分拆为：进度条 250ms、控件 500ms、状态栏 5s，减少触摸冲突
 - [x] `GifPlayer` 已接入 `/sdcard/pet/frames/*.raw` 预处理帧链路，主屏 GIF 区域已具备真实资源播放路径
+- [x] 已按最新实拍图继续做 `UI` 信息减法：去掉顶部标题、压缩状态栏、去掉 `TRACK PROGRESS` 小字、歌曲区只保留更少的信息
+- [x] 底部控制按钮已放大到 `90x52`，几何图标同步放大，便于实拍和手指操作
+- [x] 进度条与按钮区位置已重新整理，底部边缘拥挤感进一步下降
 - [x] GIF 运行时缓存策略已从整包预载改成 `5` 帧 PSRAM 窗口缓存，避免启动期大块预载和 watchdog 风险
 - [x] GIF 运行时路径已稳定为 `Flash assets SPIFFS -> PSRAM 5帧窗口 -> framebuffer -> LCD`
 - [x] UI 已去掉重复静态文案，当前只保留单一标题，不再叠 `PET UI / GIF FROM FLASH / PINK UI ...`
@@ -58,7 +61,7 @@
 - [x] SH8601 局刷已加入偶数边界对齐，底部按钮热区已从大带状收回到真实按钮框
 
 ## 下一步
-1. 继续对照 `实拍图/` 收 GIF 区、歌曲区和按钮区的脏块与清晰度，必要时进一步收窄局刷区域或改为组件级全重绘
+1. 继续对照 `实拍图/` 收顶栏、歌曲区和按钮区的清晰度；如果仍脏，下一步考虑改更大的像素字或直接做位图字体
 2. 将触摸命令从 UI 主循环直控改成入队消费，减少连按时的卡死风险
 3. 将 `touch_manager`、`storage_manager`、`main` 统一收敛到 `config/board_config.h`
 4. 补 ButtonManager、更真实的 SystemMonitor 电池读取
