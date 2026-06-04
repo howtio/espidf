@@ -13,4 +13,7 @@ idf_component_register(
         memory_pool
         system_monitor
         esp_timer
+        spiffs
 )
+
+spiffs_create_partition_image(assets ../assets/flash FLASH_IN_PROJECT)

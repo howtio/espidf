@@ -9,6 +9,7 @@
 #include "freertos/queue.h"
 #include "driver/i2c.h"
 #include "driver/gpio.h"
+#include "esp_spiffs.h"
 #include "SystemMonitor.hpp"
 #include "DisplayManager.hpp"
 #include "GifPlayer.hpp"
@@ -65,6 +66,30 @@ struct AudioTaskCtx {
 static AudioPlayer s_audio;
 static Playlist s_playlist;
 static volatile TransportCommand s_transport_command = TransportCommand::None;
+
+static bool mount_assets_partition()
+{
+    esp_vfs_spiffs_conf_t conf = {
+        .base_path = "/assets",
+        .partition_label = "assets",
+        .max_files = 8,
+        .format_if_mount_failed = false,
+    };
+    const esp_err_t ret = esp_vfs_spiffs_register(&conf);
+    if (ret != ESP_OK) {
+        ESP_LOGE("ASSET", "[ERR] SPIFFS mount failed: %s", esp_err_to_name(ret));
+        return false;
+    }
+
+    size_t total = 0;
+    size_t used = 0;
+    if (esp_spiffs_info("assets", &total, &used) == ESP_OK) {
+        ESP_LOGI("ASSET", "[INF] Assets SPIFFS mounted: used=%uKB total=%uKB",
+                 static_cast<unsigned>(used / 1024),
+                 static_cast<unsigned>(total / 1024));
+    }
+    return true;
+}
 
 static const char* control_name(UiControl control)
 {
@@ -227,6 +252,7 @@ extern "C" void app_main(void)
     monitor.init(nullptr);
     memory_pool.init();
     monitor.print_boot_banner();
+    const bool assets_ok = mount_assets_partition();
 
     // --- Display ---
     DisplayManager display;
@@ -261,14 +287,18 @@ extern "C" void app_main(void)
         auto songs = sd.scan_mp3_files("/sdcard/music");
         s_playlist.load(songs);
         ESP_LOGI(TAG, "Playlist: %zu songs loaded", s_playlist.total_count());
-        if (gif.init() && gif.load_from_directory("/sdcard/pet/frames", 71)) {
-            gif_ready = true;
-            ESP_LOGI("GIF", "[INF] Preprocessed pet frames ready from /sdcard/pet/frames");
-        } else {
-            ESP_LOGW("GIF", "[WRN] GIF frames unavailable, keep static placeholder");
-        }
     } else {
         ESP_LOGE(TAG, "SD Card: mount FAILED");
+    }
+
+    if (assets_ok && gif.init() && gif.load_from_directory("/assets/pet/frames", 71)) {
+        gif_ready = true;
+        ESP_LOGI("GIF", "[INF] Built-in flash GIF frames ready from /assets/pet/frames");
+    } else if (gif.init() && gif.load_from_directory("/sdcard/pet/frames", 71)) {
+        gif_ready = true;
+        ESP_LOGW("GIF", "[WRN] Flash GIF unavailable, fallback to /sdcard/pet/frames");
+    } else {
+        ESP_LOGW("GIF", "[WRN] GIF frames unavailable, keep static placeholder");
     }
 
     // --- Audio init in main task ---

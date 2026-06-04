@@ -150,7 +150,7 @@ bool DisplayManager::init()
 
     esp_lcd_panel_dev_config_t panel_cfg = {};
     panel_cfg.reset_gpio_num = -1;
-    panel_cfg.rgb_ele_order = LCD_RGB_ELEMENT_ORDER_BGR;
+    panel_cfg.rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB;
     panel_cfg.data_endian = LCD_RGB_DATA_ENDIAN_BIG;
     panel_cfg.bits_per_pixel = kLcdBitsPerPixel;
     panel_cfg.vendor_config = &vendor_cfg;
@@ -249,8 +249,8 @@ void DisplayManager::render_static_ui()
     fill_rect_mem(kSongPanelX, kSongPanelY, kSongPanelW, kSongPanelH, kPanelColor);
     draw_rect_outline(kSongPanelX, kSongPanelY, kSongPanelW, kSongPanelH, kPanelBorder, 2);
 
-    draw_text(20, 38, "ESP32 MP3 PLAYER", kAccentColor, kBgColor, 2);
-    draw_text(20, 58, "PINK UI / GIF FROM SD", kTextDim, kBgColor, 1);
+    draw_text(20, 40, "ESP32 MP3 PLAYER", kAccentColor, kBgColor, 2);
+    draw_text(20, 60, "PINK UI / GIF FROM FLASH", kTextDim, kBgColor, 1);
 
     draw_progress_bar(kProgressX, kProgressY, kProgressW, kProgressH, 0.0f, kGoodColor, kTrackColor);
     draw_text(kProgressX, kProgressY - 18, "TRACK PROGRESS", kTextDim, kBgColor, 1);
@@ -365,29 +365,28 @@ void DisplayManager::update_transport_controls(bool is_playing, UiControl highli
 
 UiControl DisplayManager::hit_test_control(uint16_t x, uint16_t y) const
 {
-    const int band_y0 = kControlsY - kButtonTouchPadY;
-    const int band_y1 = kControlsY + kButtonH + kButtonTouchPadY;
-    if (y < band_y0 || y > band_y1) {
-        return UiControl::None;
+    const UiControl controls[] = {
+        UiControl::Prev,
+        UiControl::PlayPause,
+        UiControl::Next,
+    };
+    for (UiControl control : controls) {
+        int bx = 0;
+        int by = 0;
+        int bw = 0;
+        int bh = 0;
+        if (!control_bounds(control, bx, by, bw, bh)) {
+            continue;
+        }
+        const int hit_x0 = bx - 8;
+        const int hit_y0 = by - 6;
+        const int hit_x1 = bx + bw + 8;
+        const int hit_y1 = by + bh + 6;
+        if (x >= hit_x0 && x <= hit_x1 && y >= hit_y0 && y <= hit_y1) {
+            return control;
+        }
     }
-
-    const int total_controls_w = (kButtonW * 3) + (kButtonGap * 2);
-    const int start_x = (BOARD_LCD_H_RES - total_controls_w) / 2;
-    const int band_x0 = std::max(0, start_x - 20);
-    const int band_x1 = std::min<int>(BOARD_LCD_H_RES - 1, start_x + total_controls_w + 20);
-    if (x < band_x0 || x > band_x1) {
-        return UiControl::None;
-    }
-
-    const int band_w = band_x1 - band_x0 + 1;
-    const int third_w = band_w / 3;
-    if (x < band_x0 + third_w) {
-        return UiControl::Prev;
-    }
-    if (x < band_x0 + (third_w * 2)) {
-        return UiControl::PlayPause;
-    }
-    return UiControl::Next;
+    return UiControl::None;
 }
 
 void DisplayManager::animate_gif_placeholder(uint32_t tick)
@@ -458,18 +457,24 @@ void DisplayManager::present_area(uint16_t x, uint16_t y, uint16_t w, uint16_t h
         return;
     }
 
-    const uint16_t x2 = std::min<uint16_t>(x + w, BOARD_LCD_H_RES);
-    const uint16_t y2 = std::min<uint16_t>(y + h, BOARD_LCD_V_RES);
-    const uint16_t clipped_w = x2 - x;
+    // SH8601 requires draw areas aligned to even boundaries.
+    const uint16_t x0 = static_cast<uint16_t>(x & ~1U);
+    const uint16_t y0 = static_cast<uint16_t>(y & ~1U);
+    const uint16_t x2 = std::min<uint16_t>(static_cast<uint16_t>((x + w + 1) & ~1U), BOARD_LCD_H_RES);
+    const uint16_t y2 = std::min<uint16_t>(static_cast<uint16_t>((y + h + 1) & ~1U), BOARD_LCD_V_RES);
+    if (x2 <= x0 || y2 <= y0) {
+        return;
+    }
+    const uint16_t clipped_w = x2 - x0;
 
-    for (uint16_t row = y; row < y2; row += kChunkRows) {
+    for (uint16_t row = y0; row < y2; row += kChunkRows) {
         const uint16_t rows_this_time = std::min<uint16_t>(kChunkRows, y2 - row);
         for (uint16_t r = 0; r < rows_this_time; ++r) {
-            const uint8_t* src = framebuffer_ + (((row + r) * BOARD_LCD_H_RES) + x) * kBytesPerPixel;
+            const uint8_t* src = framebuffer_ + (((row + r) * BOARD_LCD_H_RES) + x0) * kBytesPerPixel;
             uint8_t* dst = flush_buf_ + (r * clipped_w * kBytesPerPixel);
             std::memcpy(dst, src, clipped_w * kBytesPerPixel);
         }
-        flush_area(x, row, clipped_w, rows_this_time, flush_buf_);
+        flush_area(x0, row, clipped_w, rows_this_time, flush_buf_);
     }
 }
 
@@ -589,26 +594,31 @@ void DisplayManager::draw_button(int x, int y, int w, int h, const char* label, 
 
 void DisplayManager::draw_transport_buttons(bool is_playing, UiControl highlighted)
 {
-    const int total_controls_w = (kButtonW * 3) + (kButtonGap * 2);
-    const int start_x = (BOARD_LCD_H_RES - total_controls_w) / 2;
-    draw_button(start_x,
-                kControlsY,
-                kButtonW,
-                kButtonH,
+    int x = 0;
+    int y = 0;
+    int w = 0;
+    int h = 0;
+    control_bounds(UiControl::Prev, x, y, w, h);
+    draw_button(x,
+                y,
+                w,
+                h,
                 "|<<",
                 highlighted == UiControl::Prev,
                 3);
-    draw_button(start_x + kButtonW + kButtonGap,
-                kControlsY,
-                kButtonW,
-                kButtonH,
+    control_bounds(UiControl::PlayPause, x, y, w, h);
+    draw_button(x,
+                y,
+                w,
+                h,
                 is_playing ? "||" : ">|",
                 highlighted == UiControl::PlayPause,
                 3);
-    draw_button(start_x + (kButtonW + kButtonGap) * 2,
-                kControlsY,
-                kButtonW,
-                kButtonH,
+    control_bounds(UiControl::Next, x, y, w, h);
+    draw_button(x,
+                y,
+                w,
+                h,
                 ">>|",
                 highlighted == UiControl::Next,
                 3);
@@ -621,6 +631,30 @@ void DisplayManager::draw_progress_bar(int x, int y, int w, int h, float ratio, 
     const int fill_w = static_cast<int>((w - 2) * std::max(0.0f, std::min(1.0f, ratio)));
     if (fill_w > 0) {
         fill_rect_mem(x + 1, y + 1, fill_w, h - 2, fill);
+    }
+}
+
+bool DisplayManager::control_bounds(UiControl control, int& x, int& y, int& w, int& h) const
+{
+    const int total_controls_w = (kButtonW * 3) + (kButtonGap * 2);
+    const int start_x = (BOARD_LCD_H_RES - total_controls_w) / 2;
+    x = start_x;
+    y = kControlsY;
+    w = kButtonW;
+    h = kButtonH;
+
+    switch (control) {
+        case UiControl::Prev:
+            return true;
+        case UiControl::PlayPause:
+            x = start_x + kButtonW + kButtonGap;
+            return true;
+        case UiControl::Next:
+            x = start_x + ((kButtonW + kButtonGap) * 2);
+            return true;
+        case UiControl::None:
+        default:
+            return false;
     }
 }
 

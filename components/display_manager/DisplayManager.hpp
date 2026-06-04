@@ -47,6 +47,7 @@ private:
     void draw_button(int x, int y, int w, int h, const char* label, bool active, uint8_t scale = 1);
     void draw_transport_buttons(bool is_playing, UiControl highlighted);
     void draw_progress_bar(int x, int y, int w, int h, float ratio, uint32_t fill, uint32_t track);
+    bool control_bounds(UiControl control, int& x, int& y, int& w, int& h) const;
     static uint8_t glyph_row(char c, int row);
 
     esp_lcd_panel_io_handle_t io_ = nullptr;

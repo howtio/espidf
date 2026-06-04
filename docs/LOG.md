@@ -99,6 +99,43 @@
 - GIF 色彩虽然已从字节序层面修正，但仍需看你手里的实拍是否已经回到“接近源图”的状态
 - 整机屏幕稳定性还需要在真实触摸和长时间播放下继续观察
 - 改动文件：`components/gif_player/GifPlayer.cpp`、`components/display_manager/DisplayManager.cpp`
+- 提交号：`d711c97`
+
+---
+
+## 2026-06-04 — Phase 5 GIF 切入 Flash + SH8601 对齐修正
+
+- 根据新一轮实拍图继续收敛三个明确问题：
+- GIF 角色仍然偏蓝，说明除了 raw 字节序外还存在面板 RGB/BGR 对应问题
+- 底部按钮误触明显，原因是之前为了缓解点不到而把热区扩成了大带状
+- 歌曲区/标题区出现脏块和轻微乱码，符合 SH8601 对局刷区域需要偶数对齐的已知约束
+- 本轮构建链路修正：
+- 把 `sdkconfig` / `sdkconfig.defaults` 的 flash size 从 `2MB` 修正为 `16MB`
+- 把分区表配置从 `single_app` 切回项目自定义 `partitions.csv`
+- `main/CMakeLists.txt` 新增 `spiffs_create_partition_image(assets ../assets/flash FLASH_IN_PROJECT)`
+- 新建 `assets/flash/pet/ui_160x160.gif` 和 `assets/flash/pet/frames/*.raw`，只把 GIF 相关资源打包进 flash 的 `assets` 分区
+- 实机烧录时已确认 `flash_args` 中出现 `0x410000 build/assets.bin`
+- 运行时链路修正：
+- `main.cpp` 新增 `mount_assets_partition()`，把 `assets` SPIFFS 挂到 `/assets`
+- `GifPlayer` 现在优先从 `/assets/pet/frames` 装载预处理帧，只有失败时才回退到 SD
+- 实机串口已确认：
+- `ASSET: [INF] Assets SPIFFS mounted: used=3995KB total=7522KB`
+- `GIF: [INF] Load preprocessed GIF frames: dir=/assets/pet/frames frames=71`
+- `GIF: [INF] Built-in flash GIF frames ready from /assets/pet/frames`
+- 显示链路修正：
+- `DisplayManager` 把 `panel_cfg.rgb_ele_order` 从 `BGR` 改回 `RGB`
+- `present_area()` 现在按 SH8601 约束对局刷区域做偶数边界对齐，减少文字脏块和局部乱码
+- 底部命中逻辑从“三等分大热区”改回“真实按钮框 + 小量 padding”
+- 顶部文案同步改为 `GIF FROM FLASH`
+- 编译与烧录：
+- `idf.py build` 通过
+- 已重新烧录到 `/dev/ttyACM0`
+- 串口确认 A/B 启动、MP3 起播和 `Streaming frame 100 ... PCM water=49%` 仍正常
+- 当前明确结论：
+- GIF 资源已经进入 flash，不再依赖 SD 上的 `pet/frames`
+- 面板色序和 SH8601 对齐问题已经进入当前固件
+- 但“颜色观感是否已经完全对齐你的照片预期”仍需要你继续看板确认
+- 改动文件：`main/CMakeLists.txt`、`main/main.cpp`、`components/display_manager/DisplayManager.hpp`、`components/display_manager/DisplayManager.cpp`、`sdkconfig`、`sdkconfig.defaults`、`assets/flash/pet/*`
 - 提交号：待提交
 
 ---
