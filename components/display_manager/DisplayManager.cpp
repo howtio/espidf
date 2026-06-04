@@ -419,6 +419,37 @@ void DisplayManager::animate_gif_placeholder(uint32_t tick)
     }
 }
 
+void DisplayManager::render_gif_frame_rgb565(const uint16_t* frame, uint16_t width, uint16_t height)
+{
+    if (!frame || width == 0 || height == 0) {
+        return;
+    }
+    if (ui_mutex_ && xSemaphoreTake(ui_mutex_, pdMS_TO_TICKS(20)) != pdTRUE) {
+        return;
+    }
+
+    const uint16_t draw_w = std::min<uint16_t>(width, kGifBoxSize);
+    const uint16_t draw_h = std::min<uint16_t>(height, kGifBoxSize);
+    const int start_x = kGifBoxX + ((kGifBoxSize - draw_w) / 2);
+    const int start_y = kGifBoxY + ((kGifBoxSize - draw_h) / 2);
+
+    fill_rect_mem(kGifBoxX + 2, kGifBoxY + 2, kGifBoxSize - 4, kGifBoxSize - 4, kPanelColor);
+    for (uint16_t y = 0; y < draw_h; ++y) {
+        for (uint16_t x = 0; x < draw_w; ++x) {
+            const uint16_t px = frame[(y * width) + x];
+            const uint8_t r = static_cast<uint8_t>(((px >> 11) & 0x1F) * 255 / 31);
+            const uint8_t g = static_cast<uint8_t>(((px >> 5) & 0x3F) * 255 / 63);
+            const uint8_t b = static_cast<uint8_t>((px & 0x1F) * 255 / 31);
+            fill_rect_mem(start_x + x, start_y + y, 1, 1, rgb(r, g, b));
+        }
+    }
+    draw_rect_outline(kGifBoxX, kGifBoxY, kGifBoxSize, kGifBoxSize, kPanelBorder, 2);
+    present_area(kGifBoxX, kGifBoxY, kGifBoxSize, kGifBoxSize);
+    if (ui_mutex_) {
+        xSemaphoreGive(ui_mutex_);
+    }
+}
+
 void DisplayManager::present_area(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 {
     if (!panel_ || !framebuffer_ || !flush_buf_ || w == 0 || h == 0) {

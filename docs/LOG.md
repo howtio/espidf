@@ -28,6 +28,40 @@
 
 ---
 
+## 2026-06-04 — Phase 5 预处理 GIF 帧链路接入
+
+- 按施工文档 `Phase 5: GIF 电子宠物` 的稳定路线继续推进，没有在板子上硬塞实时 GIF 解码器
+- 当前采用的实现路线与 `tools/setup_sd_card.sh` 一致：
+- 资源源文件仍是 `assets/processed/ui_160x160.gif`
+- 运行时实际播放数据来自 `/sdcard/pet/frames/frame_000.raw ~ frame_070.raw`
+- 这样避免把 3.7MB 原始帧塞进 flash，也避免运行时 GIF 解码和音频抢 CPU
+- `GifPlayer` 改动：
+- 从纯空壳变成最小可用实现
+- `init()` 时申请一块 `160x160 RGB565` 帧缓存（PSRAM）
+- 新增 `load_from_directory("/sdcard/pet/frames", 71)`
+- `decode_next_frame()` 现在会按序读取预处理 raw 帧
+- 支持 `GifLevel` 控制跳帧倍率（FULL/REDUCED/MINIMAL）
+- `DisplayManager` 改动：
+- 新增 `render_gif_frame_rgb565(...)`
+- 将 `160x160 RGB565` 帧转换为 RGB888 后局刷到 GIF 区域
+- 继续保持顶部状态栏 / 歌曲区 / 控件区和 GIF 区域解耦
+- `main.cpp` 改动：
+- SD 卡挂载成功后初始化 `GifPlayer`
+- 优先从 `/sdcard/pet/frames` 装载预处理帧
+- 主循环每 `250ms` 推进一帧 GIF（当前先用保守节拍，优先稳）
+- 占位动画不再作为主路径
+- 编译与烧录：
+- `idf.py build` 通过
+- `esp32-mp3-player.bin` 大小提升到 `0x6a2b0`
+- 已重新烧录到 `/dev/ttyACM0`
+- 当前明确状态：
+- 代码层面已经不是“占位 GIF”，而是真正接上了 `ui_160x160.gif` 的预处理帧播放链路
+- 但这一步我还没有补跑一轮 `idf.py monitor` 去确认串口里 `GIF` 周期日志和长期稳定性
+- 改动文件：`components/gif_player/GifPlayer.hpp`、`components/gif_player/GifPlayer.cpp`、`components/display_manager/DisplayManager.hpp`、`components/display_manager/DisplayManager.cpp`、`main/main.cpp`
+- 提交号：待提交
+
+---
+
 ## 2026-06-04 — Phase 3 触摸节拍化 + 传统播放器控件首版
 
 - 按 `CLAUDE.md` / `00_总体施工文档.md` / `04_开发计划.md` 收敛屏幕交互问题，目标是先解决“触摸不工作 / 图标看不见 / 进度条不是歌曲进度”

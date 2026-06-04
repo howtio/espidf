@@ -44,9 +44,10 @@
 - [x] 触摸逻辑已从“按下即触发”改为“按下-释放在同一控件才触发”，增加消抖和滑动高亮追踪
 - [x] `display_manager` 已引入 FreeRTOS Mutex 保护 framebuffer 并发写
 - [x] UI 刷新节拍已分拆为：进度条 250ms、控件 500ms、状态栏 5s，减少触摸冲突
+- [x] `GifPlayer` 已接入 `/sdcard/pet/frames/*.raw` 预处理帧链路，主屏 GIF 区域已具备真实资源播放路径
 
 ## 下一步
-1. 把真实 GIF 源 `/home/howtion/biliesp/ui.gif` 接进工程，建立预处理和播放链路
+1. 跑一轮 `flash monitor`，确认真实 GIF 周期日志、触摸稳定性和音频不掉帧
 2. 将 `touch_manager`、`storage_manager`、`main` 统一收敛到 `config/board_config.h`
 3. 补 ButtonManager、更真实的 SystemMonitor 电池读取
 4. 开始按文档推进 App FSM / Queue 化重构
@@ -54,8 +55,8 @@
 ## 遗留问题
 
 - [ ] 板载喇叭是否已经真实出声仍需现场听感确认；当前只能从串口确认 PCM/I2S/Codec 链路在跑
-- [ ] `button_manager` / `gif_player` 仍是占位实现
-- [ ] 真实 `ui.gif` 仍未进入运行时显示链路，当前 GIF 区域还是占位动画
+- [ ] `button_manager` 仍是占位实现
+- [ ] 真实 `ui.gif` 已接入预处理帧链路，但仍需串口/实机长时验证刷新稳定性
 - [ ] `system_monitor` 目前电池数据仍为占位值，未接入 AXP2101
 - [ ] 触摸控制器当前能响应初始化，但 `FT3168 Device ID` 读回 `0x00`，仍需核实是否为兼容变体或寄存器读取差异
 - [ ] 整体控制流仍未完成文档中的 App FSM / Queue 架构

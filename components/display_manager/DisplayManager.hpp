@@ -30,6 +30,7 @@ public:
     void update_transport_controls(bool is_playing, UiControl highlighted);
     UiControl hit_test_control(uint16_t x, uint16_t y) const;
     void animate_gif_placeholder(uint32_t tick);
+    void render_gif_frame_rgb565(const uint16_t* frame, uint16_t width, uint16_t height);
     uint16_t screen_width() const { return 368; }
     uint16_t screen_height() const { return 448; }
     esp_lcd_panel_handle_t panel_handle() const { return panel_; }

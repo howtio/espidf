@@ -11,6 +11,7 @@
 #include "driver/gpio.h"
 #include "SystemMonitor.hpp"
 #include "DisplayManager.hpp"
+#include "GifPlayer.hpp"
 #include "TouchManager.hpp"
 #include "StorageManager.hpp"
 #include "Playlist.hpp"
@@ -253,11 +254,19 @@ extern "C" void app_main(void)
 
     // --- SD Card ---
     StorageManager sd;
+    GifPlayer gif;
+    bool gif_ready = false;
     if (sd.init()) {
         ESP_LOGI(TAG, "SD Card: mounted OK");
         auto songs = sd.scan_mp3_files("/sdcard/music");
         s_playlist.load(songs);
         ESP_LOGI(TAG, "Playlist: %zu songs loaded", s_playlist.total_count());
+        if (gif.init() && gif.load_from_directory("/sdcard/pet/frames", 71)) {
+            gif_ready = true;
+            ESP_LOGI("GIF", "[INF] Preprocessed pet frames ready from /sdcard/pet/frames");
+        } else {
+            ESP_LOGW("GIF", "[WRN] GIF frames unavailable, keep static placeholder");
+        }
     } else {
         ESP_LOGE(TAG, "SD Card: mount FAILED");
     }
@@ -304,6 +313,19 @@ extern "C" void app_main(void)
         if (tick_250ms >= 250) {
             tick_250ms = 0;
             display.update_playback_meter(s_audio.track_progress(), s_audio.state() == AudioState::Playing);
+            if (gif_ready && gif.is_playing()) {
+                static uint16_t* gif_frame = nullptr;
+                if (!gif_frame) {
+                    gif_frame = static_cast<uint16_t*>(MemoryPool::instance().alloc_psram(160 * 160 * sizeof(uint16_t)));
+                }
+                if (gif_frame) {
+                    uint16_t w = 0;
+                    uint16_t h = 0;
+                    if (gif.decode_next_frame(gif_frame, 160 * 160, w, h) > 0) {
+                        display.render_gif_frame_rgb565(gif_frame, w, h);
+                    }
+                }
+            }
         }
 
         if (tick_500ms >= 500) {
